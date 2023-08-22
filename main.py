@@ -16,7 +16,7 @@ import oci
 group_name = "Administrators"
 # 配置文件路径
 # file_location = "F:\Oracle_Api_Demo\.oci\config.prod"
-file_location = "/root/demo/.oci/config.prod"
+file_location = "/root/demo/oci/config.prod"
 # 文件路径
 # file_path = 'F:\Oracle_Api_Demo\params.txt'
 file_path = '/root/demo/params.txt'
