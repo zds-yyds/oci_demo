@@ -11,7 +11,7 @@ smtp_server = "smtp.qq.com"
 smtp_port = 587
 
 # 发件人邮箱的登录信息,这里是qq邮箱的授权码
-sender_password = "crxwuybpftozgfea"
+sender_password = ""
 
 # 创建邮件内容
 subject_succeed = "(^o^)实例创建成功！！！"
