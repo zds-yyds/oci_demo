@@ -356,9 +356,10 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                     elif status == 404:
                         print("创建失败(╯︵╰)---当前可用性域:" + ad + "  下无  " + str(shape_name))
                     else:
-                        print("出现未知错误。。。错误代码: " + str(status))
+                        print("出现未知错误。。。错误代码: " + str(status)+"\n"+str(e))
                         # 这里进行更新
-                        body_fail += str(status)
+                        body_fail += str(status)+"\n"+"正在创建---配置:" + shape_name + "  ocpu:" + str(instance_ocpus) + "  内存(GB):" + str(
+                                    instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs)+"\n"+str(e)
                         email_model.email_send(subject_fail, body_fail)
                         flag = False  # 设置标志变量为 False，终止 while 1 循环
                         break
@@ -399,9 +400,11 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                     print("创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
                     time.sleep(frequency)
                 else:
-                    print("出现未知错误。。。错误代码:" + str(status))
+                    print("出现未知错误。。。错误代码:" + str(status)+"\n"+str(e))
                     # 这里进行更新
-                    body_fail += str(status)
+                    body_fail += str(status) + "\n" + "正在创建---配置:" + shape_name + "  ocpu:" + str(
+                        instance_ocpus) + "  内存(GB):" + str(
+                        instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs) + "\n" + str(e)
                     email_model.email_send(subject_fail, body_fail)
                     break
 
