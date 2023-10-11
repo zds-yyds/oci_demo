@@ -16,7 +16,7 @@ import oci
 # 管理组？到时候分配给新建用户administrators权限
 group_name = "Administrators"
 # 配置文件路径
-file_location = "/root/demo/config.prod"
+file_location = "/root/demo/oci/config.prod"
 # file_location = "/root/demo/oci/config.prod"
 # 文件路径
 file_path = '/root/demo/params.txt'
