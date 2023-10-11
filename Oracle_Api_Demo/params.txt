@@ -1,5 +1,0 @@
-shape_name=VM.Standard.A1.Flex
-instance_ocpus=4
-instance_memory_in_gbs=24
-boot_volume_size_in_gbs=100
-frequency=10
