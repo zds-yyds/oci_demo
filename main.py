@@ -1,5 +1,6 @@
 # 这是一个示例 Python 脚本。
-
+from datetime import datetime
+import datetime
 import email_model
 from oci.identity import IdentityClient
 from oci.config import from_file
@@ -15,11 +16,16 @@ import oci
 # 管理组？到时候分配给新建用户administrators权限
 group_name = "Administrators"
 # 配置文件路径
-# file_location = "F:\Oracle_Api_Demo\.oci\config.prod"
-file_location = "/root/demo/oci/config.prod"
+file_location = "F:\Oracle_Api_Demo\.oci\config.prod"
+# file_location = "/root/demo/oci/config.prod"
 # 文件路径
-# file_path = 'F:\Oracle_Api_Demo\params.txt'
-file_path = '/root/demo/params.txt'
+file_path = 'F:\Oracle_Api_Demo\params.txt'
+
+arm = "VM.Standard.A1.Flex"
+amd = "VM.Standard.E2.1.Micro"
+
+
+# file_path = '/root/demo/params.txt'
 
 
 def get_compute():
@@ -346,6 +352,7 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                 except Exception as e:
                     # 处理异常，例如打印异常信息
                     status = getattr(e, 'status', None)
+                    code = getattr(e, 'code', None)
                     if status == 500:
                         print("创建失败(╯︵╰)--第" + str(numb1) + "次抢机--可用性域 " + ad + " 主机容量不足，请再次尝试。。。")
                         numb1 = numb1 + 1
@@ -355,11 +362,21 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                         time.sleep(frequency)
                     elif status == 404:
                         print("创建失败(╯︵╰)---当前可用性域:" + ad + "  下无  " + str(shape_name))
+                    elif status == 400:
+                        print("创建失败(╯︵╰)---错误类型:" + str(code))
+                        time.sleep(frequency)
+                    elif status == 502:
+                        print("创建失败(╯︵╰)---错误类型:" + str(code))
+                        time.sleep(frequency)
+                    elif status == 503:
+                        print("创建失败(╯︵╰)---错误类型:" + str(code))
+                        time.sleep(frequency)
                     else:
-                        print("出现未知错误。。。错误代码: " + str(status)+"\n"+str(e))
+                        print("出现未知错误。。。错误代码: " + str(status) + "\n" + str(e))
                         # 这里进行更新
-                        body_fail += str(status)+"\n"+"正在创建---配置:" + shape_name + "  ocpu:" + str(instance_ocpus) + "  内存(GB):" + str(
-                                    instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs)+"\n"+str(e)
+                        body_fail += str(status) + "\n" + "正在创建---配置:" + shape_name + "  ocpu:" + str(
+                            instance_ocpus) + "  内存(GB):" + str(
+                            instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs) + "\n" + str(e)
                         email_model.email_send(subject_fail, body_fail)
                         flag = False  # 设置标志变量为 False，终止 while 1 循环
                         break
@@ -391,6 +408,7 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
             except Exception as e:
                 # 处理异常，例如打印异常信息
                 status = getattr(e, 'status', None)
+                code = getattr(e, 'code', None)
                 if status == 500:
                     print("创建失败(╯︵╰)--第" + str(numb) + "次抢机--可用性域 " + ad1 + " 主机容量不足，请再次尝试。。。")
                     # email_model.email_send("测试", "测试")
@@ -399,8 +417,17 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                 elif status == 429:
                     print("创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
                     time.sleep(frequency)
+                elif status == 400:
+                    print("创建失败(╯︵╰)---错误类型:" + str(code))
+                    time.sleep(frequency)
+                elif status == 502:
+                    print("创建失败(╯︵╰)---错误类型:" + str(code))
+                    time.sleep(frequency)
+                elif status == 503:
+                    print("创建失败(╯︵╰)---错误类型:" + str(code))
+                    time.sleep(frequency)
                 else:
-                    print("出现未知错误。。。错误代码:" + str(status)+"\n"+str(e))
+                    print("出现未知错误。。。错误代码:" + str(status) + "\n" + str(e))
                     # 这里进行更新
                     body_fail += str(status) + "\n" + "正在创建---配置:" + shape_name + "  ocpu:" + str(
                         instance_ocpus) + "  内存(GB):" + str(
@@ -450,7 +477,7 @@ def creat_user(you_email):  # 注意！这里的邮箱和
     request = CreateUserDetails()
     request.compartment_id = compartment_id
     request.name = you_email
-    request.description = "Created with the Python SDK"
+    request.description = "Created with the Fuckyou"
     request.email = you_email
     # 发送创建用户的请求
     user = identity.create_user(request)
@@ -483,6 +510,39 @@ def creat_user(you_email):  # 注意！这里的邮箱和
     print(response.status)
 
 
+def delete_user(my_email):  # 注意！这里的邮箱和
+    config = get_config(file_location)
+    identity = get_identityClient()
+    compartment_id = get_compartment_id()
+    groups = identity.list_groups(compartment_id=config["tenancy"]).data
+    group_ocid = ""
+    for group in groups:
+        if group.name == group_name:
+            group_ocid = group.id
+            break
+    # 这里group_ocid为 admin 组
+    users = identity.list_users(compartment_id=config["tenancy"]).data
+    user_ocid = None
+    for user in users:
+        # print(user)
+        if user.name == my_email:
+            user_ocid = user.id
+            # break
+    # print(user_ocid)
+    # memberships = identity.list_user_group_memberships(
+    #     compartment_id=compartment_id,
+    #     user_id=user_ocid,
+    #     group_id=group_ocid)
+    # print(memberships)
+    # assert len(memberships.data) == 1 #==1则表示用户在该组中
+    #
+    # membership_id = memberships.data[0].id
+    # identity.remove_user_from_group(user_group_membership_id=membership_id).status
+
+    Delete_user = identity.delete_user(user_id=user_ocid)
+    print(Delete_user.status)
+
+
 def read_params_from_file(file_path):
     params = {}
     with open(file_path, 'r') as file:
@@ -497,11 +557,81 @@ def read_params_from_file(file_path):
     return params
 
 
+def get_all_network_info():
+    # 子网的 OCID，你需要提供要查询的子网的 OCID
+    subnet_ocid = get_subnet_id()
+    # 获取当前日期和时间
+    # current_datetime = datetime.datetime.now()
+
+    compartment_id = get_compartment_id()
+    # OCI 指标查询的起始时间和结束时间
+    start_time = "2023-08-01T00:00:00Z"  # 修改为你的起始时间
+    end_time = "2023-09-02T00:00:00Z"  # 修改为你的结束时间
+
+    # 创建 OCI 客户端
+    config = get_config(file_location)
+    monitoring_client = oci.monitoring.MonitoringClient(config)
+    obj_list_metrics = {}
+    # 查询子网的网络流量指标
+    try:
+        response = monitoring_client.list_metrics(
+            compartment_id=compartment_id,
+            # opc_request_id=subnet_ocid,
+            list_metrics_details=oci.monitoring.models.ListMetricsDetails()
+        )
+        # summarize_metrics_data_response = monitoring_client.summarize_metrics_data(
+        #     compartment_id=compartment_id,
+        #     summarize_metrics_data_details=oci.monitoring.models.SummarizeMetricsDataDetails(
+        #         namespace="EXAMPLE-namespace-Value",
+        #         query="EXAMPLE-query-Value",
+        #         resource_group="EXAMPLE-resourceGroup-Value",
+        #         start_time=datetime.strptime(
+        #             "2023-07-15T14:17:34.472Z",
+        #             "%Y-%m-%dT%H:%M:%S.%fZ"),
+        #         end_time=datetime.strptime(
+        #             "2023-08-24T14:46:54.388Z",
+        #             "%Y-%m-%dT%H:%M:%S.%fZ"),
+        #         resolution="EXAMPLE-resolution-Value"),
+        #     opc_request_id="OJH3ENHCKITISWYMJD0U<unique_ID>",
+        #     compartment_id_in_subtree=True)
+        # print(summarize_metrics_data_response.data)
+        # 提取并打印出子网的网络流量信息
+        obj_list_metrics = {}
+        for item in response.data:
+            if item.name == "BytesFromIgw" or item.name == "BytesToIgw":
+                obj_list_metrics[item.name] = item
+        obj_list_metrics = obj_list_metrics
+        # for item in response.data:
+        #     print(
+        #         f"时间: {item.time_stamp}, 入站字节数: {item.values['Network.InBytes[1m]']}, 出站字节数: {item.values['Network.OutBytes[1m]']}")
+
+    except oci.exceptions.ServiceError as e:
+        print(f"查询流量信息失败: {e}")
+    # resourceId = obj_list_metrics['BytesFromIgw']['dimensions']['resourceId']
+    name = obj_list_metrics['BytesFromIgw'].name
+    namespace = obj_list_metrics['BytesFromIgw'].namespace
+
+    summarize_metrics_data_response = monitoring_client.summarize_metrics_data(
+        compartment_id=compartment_id,
+        summarize_metrics_data_details=oci.monitoring.models.SummarizeMetricsDataDetails(
+            namespace=namespace,
+            query="NetworkInPackets",
+            # resource_group = null,
+            start_time="2023-01-01T00:00:00Z",
+            end_time="2023-01-02T00:00:00Z"
+        ),
+    )
+    print(summarize_metrics_data_response.data)
+
+
 if __name__ == '__main__':
     # 验证 config!! 配置文件加载没问题则不报错
     # validate_config(config)
-    # you_email = "zdsyydsxy@outlook.com"
+    you_email = "mdioieq@outlook.com"
+    my_email = "zdsyydsxy@outlook.com"
+
     # creat_user(you_email)
+    # delete_user(my_email)
     # 读取形参的值
     params = read_params_from_file(file_path)
 
