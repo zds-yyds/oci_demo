@@ -627,8 +627,6 @@ def get_all_network_info():
 if __name__ == '__main__':
     # 验证 config!! 配置文件加载没问题则不报错
     # validate_config(config)
-    you_email = "mdioieq@outlook.com"
-    my_email = "zdsyydsxy@outlook.com"
 
     # creat_user(you_email)
     # delete_user(my_email)
