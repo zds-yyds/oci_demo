@@ -12,6 +12,7 @@ from oci.core.models import LaunchInstanceDetails
 from oci.core.models import InstanceSourceViaImageDetails
 import time
 import oci
+import pytz
 
 # 管理组？到时候分配给新建用户administrators权限
 group_name = "Administrators"
@@ -231,6 +232,10 @@ def CreateOrGetNetworkInfrastructure():
 
 def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volume_size_in_gbs, frequency):
     # shape_name, instance_ocpus, instance_memory_in_gbs, boot_volume_size_in_gbs
+    if shape_name == "amd":
+        shape_name = amd
+    elif shape_name == "arm":
+        shape_name = arm
     global instance
     instance = oci.core.models.Instance
     print("创建计算服务客户端compute:...")
@@ -239,14 +244,6 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
     print("获取租户Id中:...")
     compartment_id = get_compartment_id()
     print("已完成。")
-
-    # 获取实例信息和镜像信息，这里用示例数据代替
-    # instance_ocpus = 1.0  # 示例实例的Ocpus
-    # instance_memory_in_gbs = 1.0  # 示例实例的MemoryInGBs
-    # 创建自定义计算形状对象
-    # shape_name = "VM.Standard.E2.1.Micro"  # 替换为自定义的计算形状名称,VM.Standard.E2.1.Micro    VM.Standard.A1.Flex
-    # ssh_username = "root"
-    # ssh_password = "zdsyyds"  # 替换为您想要设置的密码
 
     print("获取镜像信息中:...")
     image_id = get_images_list(shape_name)
@@ -302,11 +299,7 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
     # 将实例的 SSH 公钥赋值给元数据的 "ssh_authorized_keys" 字段
     meta_data[
         "ssh_authorized_keys"] = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCiwp3W8IwI1ineymY5o3F2s02np1OfApkBlnFfJFvQ5MYfFl1F4Dqry429EC3zdXGjX+4bhU9nX2sXjw0pk8ZyEC5zJTZ75raqAKFtQaBhB+SY5CcGwD5NvGnLGd+MNhT5K1tHvF5KJSMELsmnl2/5DwrGeWiV0ZUWvMg8KdsRlNGCtTaNQnUxKW9WqYqFrD/tFiZ1tGSQFNr6V3KqjlfZY3bbtURazmthSncaqkZnqvM0Nlap4KFjAArof1tYGkeCXFiO7/FMpFCUtYZpNG5Gum+1gDVVKJZLCjUSWWeO6fn5uVOx5vjQnxzqExNbHo7ke2++Z6B5r6qvMxnlvtR/ 张迪生@DESKTOP-CO53JAE"
-    # # 检查实例的 CloudInit 字段是否有值
-    # if instance.cloud_init:
-    #     # 如果实例的 CloudInit 字段有值，则将该值赋值给元数据的 "user_data" 字段
-    #     meta_data["user_data"] = instance.cloud_init
-    # 将配置好的元数据 meta_data 赋值给创建实例的请求 request 的 Metadata 字段
+
     request.metadata = meta_data
     print("已完成。")
     print("加载可用域中:...")
@@ -329,13 +322,18 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
             for ad in availability_domain:
                 print("正在尝试:   " + ad)
                 request.availability_domain = ad
+                # 获取当前时间
+                current_time_utc = datetime.datetime.now(pytz.utc)
+                # 转换为UTC+8时区
+                china_tz = pytz.timezone('Asia/Shanghai')
+                timestamp = current_time_utc.astimezone(china_tz)
                 try:
                     instance_response = compute.launch_instance(request)
                     if instance_response.status == 200:
                         print("(^o^)实例创建成功！！！")
                         time.sleep(60)
                         instance = instance_response.data
-                        body_succeed = body_succeed + "\n区域:" + str(instance.region) + "\n实例名称:" + str(
+                        body_succeed = body_succeed + "\n时间:" + str(timestamp) + "\n区域:" + ad + "\n实例名称:" + str(
                             instance.display_name) + "\n可用性域:" + str(instance.availability_domain) + "\n实例类型:" + str(
                             instance.shape) + "\nOCPU个数:" + str(instance.shape_config.ocpus) + "\n内存(GB):" + str(
                             instance.shape_config.memory_in_gbs) + "\n尝试次数:" + str(numb1)
@@ -353,28 +351,29 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                     # 处理异常，例如打印异常信息
                     status = getattr(e, 'status', None)
                     code = getattr(e, 'code', None)
+
                     if status == 500:
-                        print("创建失败(╯︵╰)--第" + str(numb1) + "次抢机--可用性域 " + ad + " 主机容量不足，请再次尝试。。。")
+                        print(str(timestamp)+"--创建失败(╯︵╰)--第" + str(numb1) + "次抢机--可用性域 " + ad + " 主机容量不足，请再次尝试。。。")
                         numb1 = numb1 + 1
                         time.sleep(frequency)
                     elif status == 429:
-                        print("创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
+                        print(str(timestamp)+"--创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
                         time.sleep(frequency)
                     elif status == 404:
-                        print("创建失败(╯︵╰)---当前可用性域:" + ad + "  下无  " + str(shape_name))
+                        print(str(timestamp)+"--创建失败(╯︵╰)---当前可用性域:" + ad + "  下无  " + str(shape_name))
                     elif status == 400:
-                        print("创建失败(╯︵╰)---错误类型:" + str(code))
+                        print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
                         time.sleep(frequency)
                     elif status == 502:
-                        print("创建失败(╯︵╰)---错误类型:" + str(code))
+                        print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
                         time.sleep(frequency)
                     elif status == 503:
-                        print("创建失败(╯︵╰)---错误类型:" + str(code))
+                        print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
                         time.sleep(frequency)
                     else:
-                        print("出现未知错误。。。错误代码: " + str(status) + "\n" + str(e))
+                        print(str(timestamp)+"--出现未知错误。。。错误代码: " + str(status) + "\n" + str(e))
                         # 这里进行更新
-                        body_fail += str(status) + "\n" + "正在创建---配置:" + shape_name + "  ocpu:" + str(
+                        body_fail += str(status) + "\n时间:"+str(timestamp) + "\n区域:" + ad + "\n正在创建---配置:" + shape_name + "  ocpu:" + str(
                             instance_ocpus) + "  内存(GB):" + str(
                             instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs) + "\n" + str(e)
                         email_model.email_send(subject_fail, body_fail)
@@ -387,13 +386,18 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
         request.availability_domain = ad1
         numb = 1
         while 1:
+            # 获取当前时间
+            current_time_utc = datetime.datetime.now(pytz.utc)
+            # 转换为UTC+8时区
+            china_tz = pytz.timezone('Asia/Shanghai')
+            timestamp = current_time_utc.astimezone(china_tz)
             try:
                 instance_response = compute.launch_instance(request)
                 if instance_response.status == 200:
                     print("(^o^)实例创建成功！！！")
                     time.sleep(60)
                     instance = instance_response.data
-                    body_succeed = body_succeed + "\n区域:" + str(instance.region) + "\n实例名称:" + str(
+                    body_succeed = body_succeed + "\n时间:" + str(timestamp) + "\n区域:" + ad1 + "\n实例名称:" + str(
                         instance.display_name) + "\n可用性域:" + str(instance.availability_domain) + "\n实例类型:" + str(
                         instance.shape) + "\nOCPU个数:" + str(instance.shape_config.ocpus) + "\n内存(GB):" + str(
                         instance.shape_config.memory_in_gbs) + "\n尝试次数:" + str(numb)
@@ -409,27 +413,28 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                 # 处理异常，例如打印异常信息
                 status = getattr(e, 'status', None)
                 code = getattr(e, 'code', None)
+
                 if status == 500:
-                    print("创建失败(╯︵╰)--第" + str(numb) + "次抢机--可用性域 " + ad1 + " 主机容量不足，请再次尝试。。。")
+                    print(str(timestamp)+"--创建失败(╯︵╰)--第" + str(numb) + "次抢机--可用性域 " + ad1 + " 主机容量不足，请再次尝试。。。")
                     # email_model.email_send("测试", "测试")
                     numb = numb + 1
                     time.sleep(frequency)
                 elif status == 429:
-                    print("创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
+                    print(str(timestamp)+"--创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
                     time.sleep(frequency)
                 elif status == 400:
-                    print("创建失败(╯︵╰)---错误类型:" + str(code))
+                    print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
                     time.sleep(frequency)
                 elif status == 502:
-                    print("创建失败(╯︵╰)---错误类型:" + str(code))
+                    print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
                     time.sleep(frequency)
                 elif status == 503:
-                    print("创建失败(╯︵╰)---错误类型:" + str(code))
+                    print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
                     time.sleep(frequency)
                 else:
                     print("出现未知错误。。。错误代码:" + str(status) + "\n" + str(e))
                     # 这里进行更新
-                    body_fail += str(status) + "\n" + "正在创建---配置:" + shape_name + "  ocpu:" + str(
+                    body_fail += str(status) + "\n时间:"+str(timestamp)+ "\n区域:" + ad1 + "\n正在创建---配置:" + shape_name + "  ocpu:" + str(
                         instance_ocpus) + "  内存(GB):" + str(
                         instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs) + "\n" + str(e)
                     email_model.email_send(subject_fail, body_fail)
