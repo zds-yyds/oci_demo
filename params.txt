@@ -1,4 +1,4 @@
-shape_name=VM.Standard.A1.Flex
+shape_name=arm
 instance_ocpus=4
 instance_memory_in_gbs=24
 boot_volume_size_in_gbs=100
