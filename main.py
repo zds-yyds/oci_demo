@@ -72,7 +72,7 @@ def get_images_list(shape):
     for image in images.data:
         # print("映像名称:", image.display_name + "映像 OCID:", image.id)
         if (
-                image.display_name == "Canonical-Ubuntu-20.04-2023.09.28-0" or image.display_name == "Canonical-Ubuntu-20.04-aarch64-2023.09.28-0"):
+                image.display_name == "Canonical-Ubuntu-20.04-2024.04.16-0" or image.display_name == "Canonical-Ubuntu-20.04-aarch64-2024.04.16-0"):
             # print(image.id)
             return image.id
     # 或者抛出异常
