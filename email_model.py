@@ -37,6 +37,7 @@ def email_send(subject, body):
 
             # 发送邮件
             server.sendmail(sender_email, receiver_email, message.as_string())
+            server.quit()
             print("邮件发送成功！")
 
     except Exception as e:
