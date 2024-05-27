@@ -201,12 +201,54 @@ def ListVnicAttachments():  # 返回一个.data数组，包含ListVnic的个数�
     list_vnic_attachments_response = compute.list_vnic_attachments(
         compartment_id=compartment_id)
     # 从响应中获取数据
-    print(list_vnic_attachments_response.data)
+    # print(list_vnic_attachments_response.data)
     return list_vnic_attachments_response.data
 
 
-def get_vnic():
+def get_vnic():  # 获取所有实例的vnic信息
     Vnics = ListVnicAttachments()
+    alive_instances = []
+    for Vnic in Vnics:
+        if Vnic.lifecycle_state == "ATTACHED":
+            alive_instances.append(Vnic)
+    return alive_instances
+
+
+def get_vnicid_by_instance_id(instance_id):
+    config = oci.config.from_file(file_location=file_location, profile_name='DEFAULT')
+    core_client = oci.core.VirtualNetworkClient(config)
+    alive_instances = get_vnic()
+    # print(alive_instances)
+    for Vnic in alive_instances:
+        if Vnic.instance_id == instance_id:
+            get_vnic_response = core_client.get_vnic(vnic_id=Vnic.vnic_id)
+            return get_vnic_response.data
+
+
+def get_ipv4_by_vnic(instance_id):
+    this_vnic = get_vnicid_by_instance_id(instance_id)
+    print(this_vnic)
+    return this_vnic.public_ip
+
+
+def get_hostname_label_by_vnic(instance_id):  # 获取实例名称
+    this_vnic = get_vnicid_by_instance_id(instance_id)
+    return this_vnic.hostname_label
+
+
+def get_ipv6_addresses_by_vnic(instance_id):  # 获取ipv6
+    this_vnic = get_vnicid_by_instance_id(instance_id)
+    return this_vnic.ipv6_addresses
+
+
+def get_lifecycle_state_by_vnic(instance_id):  # 获取实例状态，类似running
+    this_vnic = get_vnicid_by_instance_id(instance_id)
+    return this_vnic.lifecycle_state
+
+
+def get_time_created_by_vnic(instance_id):  # 获取实例创建时间
+    this_vnic = get_vnicid_by_instance_id(instance_id)
+    return this_vnic.time_created
 
 
 def list_vcns():
@@ -236,7 +278,6 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
         shape_name = amd
     elif shape_name == "arm":
         shape_name = arm
-    global instance
     instance = oci.core.models.Instance
     print("创建计算服务客户端compute:...")
     compute = get_compute()
@@ -333,10 +374,13 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                         print("(^o^)实例创建成功！！！")
                         time.sleep(60)
                         instance = instance_response.data
+                        instance_id = str(instance.id)
                         body_succeed = body_succeed + "\n时间:" + str(timestamp) + "\n区域:" + ad + "\n实例名称:" + str(
-                            instance.display_name) + "\n可用性域:" + str(instance.availability_domain) + "\n实例类型:" + str(
+                            instance.display_name) + "\n可用性域:" + str(
+                            instance.availability_domain) + "\n实例类型:" + str(
                             instance.shape) + "\nOCPU个数:" + str(instance.shape_config.ocpus) + "\n内存(GB):" + str(
-                            instance.shape_config.memory_in_gbs) + "\n尝试次数:" + str(numb1)
+                            instance.shape_config.memory_in_gbs) + "\nipv4:" + str(
+                            get_ipv4_by_vnic(instance_id)) + "\n尝试次数:" + str(numb1)
                         email_model.email_send(subject_succeed, body_succeed)
                         flag = False  # 设置标志变量为 False，终止 while 1 循环
                         break
@@ -344,7 +388,7 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                         error_message = instance_response.data.message
                         print("未知错误:", error_message)
                         # 这里发一封错误邮件
-                        email_model.email_send(subject_fail, "这里为非200错误，这里出现错误则很罕见")
+                        email_model.email_send(subject_fail, "这里为非200错误，未知原因！")
                         flag = False  # 设置标志变量为 False，终止 while 1 循环
                         break
                 except Exception as e:
@@ -353,27 +397,29 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                     code = getattr(e, 'code', None)
 
                     if status == 500:
-                        print(str(timestamp)+"--创建失败(╯︵╰)--第" + str(numb1) + "次抢机--可用性域 " + ad + " 主机容量不足，请再次尝试。。。")
+                        print(str(timestamp) + "--创建失败(╯︵╰)--第" + str(
+                            numb1) + "次抢机--可用性域 " + ad + " 主机容量不足，请再次尝试。。。")
                         numb1 = numb1 + 1
                         time.sleep(frequency)
                     elif status == 429:
-                        print(str(timestamp)+"--创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
+                        print(str(timestamp) + "--创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
                         time.sleep(frequency)
                     elif status == 404:
-                        print(str(timestamp)+"--创建失败(╯︵╰)---当前可用性域:" + ad + "  下无  " + str(shape_name))
+                        print(str(timestamp) + "--创建失败(╯︵╰)---当前可用性域:" + ad + "  下无  " + str(shape_name))
                     elif status == 400:
-                        print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
+                        print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                         time.sleep(frequency)
                     elif status == 502:
-                        print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
+                        print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                         time.sleep(frequency)
                     elif status == 503:
-                        print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
+                        print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                         time.sleep(frequency)
                     else:
-                        print(str(timestamp)+"--出现未知错误。。。错误代码: " + str(status) + "\n" + str(e))
+                        print(str(timestamp) + "--出现未知错误。。。错误代码: " + str(status) + "\n" + str(e))
                         # 这里进行更新
-                        body_fail += str(status) + "\n时间:"+str(timestamp) + "\n区域:" + ad + "\n正在创建---配置:" + shape_name + "  ocpu:" + str(
+                        body_fail += str(status) + "\n时间:" + str(
+                            timestamp) + "\n区域:" + ad + "\n正在创建---配置:" + shape_name + "  ocpu:" + str(
                             instance_ocpus) + "  内存(GB):" + str(
                             instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs) + "\n" + str(e)
                         email_model.email_send(subject_fail, body_fail)
@@ -397,17 +443,20 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                     print("(^o^)实例创建成功！！！")
                     time.sleep(60)
                     instance = instance_response.data
+                    instance_id = str(instance.id)
                     body_succeed = body_succeed + "\n时间:" + str(timestamp) + "\n区域:" + ad1 + "\n实例名称:" + str(
-                        instance.display_name) + "\n可用性域:" + str(instance.availability_domain) + "\n实例类型:" + str(
+                        instance.display_name) + "\n可用性域:" + str(
+                        instance.availability_domain) + "\n实例类型:" + str(
                         instance.shape) + "\nOCPU个数:" + str(instance.shape_config.ocpus) + "\n内存(GB):" + str(
-                        instance.shape_config.memory_in_gbs) + "\n尝试次数:" + str(numb)
+                        instance.shape_config.memory_in_gbs) + "\nipv4:" + str(
+                        get_ipv4_by_vnic(instance_id)) + "\n尝试次数:" + str(numb)
                     email_model.email_send(subject_succeed, body_succeed)
                     break
                 else:
                     error_message = instance_response.data.message
                     print("未知错误:", error_message)
                     # 这里进行更新
-                    email_model.email_send(subject_fail, "这里为非200错误，这里出现错误则很罕见")
+                    email_model.email_send(subject_fail, "这里为非200错误，未知原因！")
                     break
             except Exception as e:
                 # 处理异常，例如打印异常信息
@@ -415,26 +464,28 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                 code = getattr(e, 'code', None)
 
                 if status == 500:
-                    print(str(timestamp)+"--创建失败(╯︵╰)--第" + str(numb) + "次抢机--可用性域 " + ad1 + " 主机容量不足，请再次尝试。。。")
+                    print(str(timestamp) + "--创建失败(╯︵╰)--第" + str(
+                        numb) + "次抢机--可用性域 " + ad1 + " 主机容量不足，请再次尝试。。。")
                     # email_model.email_send("测试", "测试")
                     numb = numb + 1
                     time.sleep(frequency)
                 elif status == 429:
-                    print(str(timestamp)+"--创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
+                    print(str(timestamp) + "--创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
                     time.sleep(frequency)
                 elif status == 400:
-                    print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
+                    print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                     time.sleep(frequency)
                 elif status == 502:
-                    print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
+                    print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                     time.sleep(frequency)
                 elif status == 503:
-                    print(str(timestamp)+"--创建失败(╯︵╰)---错误类型:" + str(code))
+                    print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                     time.sleep(frequency)
                 else:
                     print("出现未知错误。。。错误代码:" + str(status) + "\n" + str(e))
                     # 这里进行更新
-                    body_fail += str(status) + "\n时间:"+str(timestamp)+ "\n区域:" + ad1 + "\n正在创建---配置:" + shape_name + "  ocpu:" + str(
+                    body_fail += str(status) + "\n时间:" + str(
+                        timestamp) + "\n区域:" + ad1 + "\n正在创建---配置:" + shape_name + "  ocpu:" + str(
                         instance_ocpus) + "  内存(GB):" + str(
                         instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs) + "\n" + str(e)
                     email_model.email_send(subject_fail, body_fail)
@@ -629,13 +680,33 @@ def get_all_network_info():
     print(summarize_metrics_data_response.data)
 
 
+def get_security_policies():
+    config = oci.config.from_file(file_location=file_location, profile_name='DEFAULT')
+    cloud_guard_client = oci.cloud_guard.CloudGuardClient(config)
+    response = cloud_guard_client.list_security_policies(
+        compartment_id=get_compartment_id()
+    )
+    print(response.data)
+    return response.data
+
+
 if __name__ == '__main__':
+    # @ 1:
     # 验证 config!! 配置文件加载没问题则不报错
     # validate_config(config)
 
+    # @ 2:
+    # 创建用户 ,顺带加上admin权限
+    # you_email="XXXXX@xx.com"
     # creat_user(you_email)
-    # delete_user(my_email)
-    # 读取形参的值
-    params = read_params_from_file(file_path)
 
+    # @ 3:
+    # 删除用户 ,顺带加上admin权限
+    # my_email="XXXXX@xx.com"
+    # delete_user(my_email)
+
+    # @ 3:
+    # 创建实例（抢鸡）
+    params = read_params_from_file(file_path)  # 读取形参的值（你要抢的配置）
     creat_instance(**params)
+
