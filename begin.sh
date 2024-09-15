@@ -80,4 +80,4 @@ if [ -f "${CURRENT_DIR}/output.log" ]; then
   exit 1
 fi
 nohup python3 -u main.py > output.log &
-exit 1
+
