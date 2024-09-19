@@ -4,6 +4,7 @@ CURRENT_DIR=$(pwd)
 
 #如果不包含"demo/demo1/……"就退出
 if [[ "$CURRENT_DIR" != *demo* ]]; then
+  echo "错误: 请确保路径正确！"
   exit 1
 fi
 
@@ -73,11 +74,13 @@ source "${CURRENT_DIR}/venv/bin/activate"
 
 if [ -f "${CURRENT_DIR}/output.log" ]; then
   if [ -f "${CURRENT_DIR}/output1.log" ]; then
-    nohup python3 -u main.py > output2.log &
-    exit 1
+    nohup python3 -u main.py > output2.log 2>&1 & echo "PID: $!" >> pid2.txt && echo "$shape_name" >> pid2.txt
+    exit 0
   fi
-  nohup python3 -u main.py > output1.log &
-  exit 1
+  nohup python3 -u main.py > output1.log 2>&1 & echo "PID: $!" >> pid1.txt && echo "$shape_name" >> pid1.txt
+  exit 0
 fi
-nohup python3 -u main.py > output.log &
+nohup python3 -u main.py > output.log 2>&1 & echo "PID: $!" >> pid.txt && echo "$shape_name" >> pid.txt
+exit 0
+
 
