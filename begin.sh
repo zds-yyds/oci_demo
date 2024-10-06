@@ -24,6 +24,35 @@ if [[ "$LINE_14" == 'sender_password = ""' ]]; then
     echo "警告: 未配置邮箱！！"
 fi
 
+cd "${CURRENT_DIR}" || exit
+
+
+# 定义 PID 文件列表
+pid_files=("pid1.txt" "pid2.txt" "pid3.txt" "pid4.txt")
+
+# 遍历每一个 pid 文件
+for pid_file in "${pid_files[@]}"; do
+  # 检查 pid 文件是否存在且不为空
+  if [ -s "$pid_file" ]; then
+    # 读取 pid 文件的第一行（进程号）
+    pid=$(head -n 1 "$pid_file")
+    
+    # 检查进程号是否存在
+    if ! ps -p "$pid" > /dev/null 2>&1; then
+      # 如果进程不存在，删除 pid 文件
+      echo "进程 $pid 不存在，删除 $pid_file"
+      rm -f "$pid_file"
+      # 删除对应的 output 文件
+      output_file="${pid_file//pid/output}"
+      output_file="${output_file/.txt/.log}"
+      if [ -f "$output_file" ]; then
+        echo "删除对应的 $output_file 文件"
+        rm -f "$output_file"
+      fi
+    fi
+  fi
+done
+
 # 读取 params.txt 文件的内容，检查是否包含预期的 shape_name
 if [ -f "${CURRENT_DIR}/params.txt" ]; then
   echo "打开文件 ${CURRENT_DIR}/params.txt 进行读取..."
@@ -69,18 +98,25 @@ else
   exit 1
 fi
 
-cd "${CURRENT_DIR}" || exit
 source "${CURRENT_DIR}/venv/bin/activate"
 
-if [ -f "${CURRENT_DIR}/output.log" ]; then
-  if [ -f "${CURRENT_DIR}/output1.log" ]; then
-    nohup python3 -u main.py > output2.log 2>&1 & echo "PID: $!" >> pid2.txt && echo "$shape_name" >> pid2.txt
+if [ -f "${CURRENT_DIR}/output1.log" ]; then
+  if [ -f "${CURRENT_DIR}/output2.log" ]; then
+    if [ -f "${CURRENT_DIR}/output3.log" ]; then
+      if [ -f "${CURRENT_DIR}/output4.log" ]; then
+        echo "删除已存在的 output4.log 文件"
+        rm -f "${CURRENT_DIR}/output4.log"
+      fi
+      nohup python3 -u main.py > output4.log 2>&1 & echo "PID: $!" >> pid4.txt && echo "$shape_name" >> pid4.txt
+      exit 0
+    fi
+    nohup python3 -u main.py > output3.log 2>&1 & echo "PID: $!" >> pid3.txt && echo "$shape_name" >> pid3.txt
     exit 0
   fi
-  nohup python3 -u main.py > output1.log 2>&1 & echo "PID: $!" >> pid1.txt && echo "$shape_name" >> pid1.txt
+  nohup python3 -u main.py > output2.log 2>&1 & echo "PID: $!" >> pid2.txt && echo "$shape_name" >> pid2.txt
   exit 0
 fi
-nohup python3 -u main.py > output.log 2>&1 & echo "PID: $!" >> pid.txt && echo "$shape_name" >> pid.txt
+nohup python3 -u main.py > output1.log 2>&1 & echo "PID: $!" >> pid1.txt && echo "$shape_name" >> pid1.txt
 exit 0
 
 
