@@ -79,6 +79,7 @@ fi
 
 
 # 遍历每一个 pid 文件
+echo "########遍历每一个 pid 文件########"
 for pid_file in "${pid_files[@]}"; do
   # 检查 pid 文件是否存在且不为空
   if [ -s "$pid_file" ]; then
@@ -96,6 +97,7 @@ for pid_file in "${pid_files[@]}"; do
       if [ -f "$output_file" ]; then
         echo "删除对应的 $output_file 文件"
         rm -f "$output_file"
+	echo "################################"
       fi
     fi
   fi
