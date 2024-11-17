@@ -97,12 +97,12 @@ for pid_file in "${pid_files[@]}"; do
       if [ -f "$output_file" ]; then
         echo "删除对应的 $output_file 文件"
         rm -f "$output_file"
-	echo "################################"
+	
       fi
     fi
   fi
 done
-
+echo "################################"
 source "${CURRENT_DIR}/venv/bin/activate"
 
 if [ -f "${CURRENT_DIR}/output1.log" ]; then
