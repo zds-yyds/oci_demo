@@ -110,16 +110,16 @@ if [ -f "${CURRENT_DIR}/output1.log" ]; then
         echo "删除已存在的 output4.log 文件"
         rm -f "${CURRENT_DIR}/output4.log"
       fi
-      nohup python3 -u main.py > output4.log 2>&1 & echo "PID: $!" >> pid4.txt && echo "$shape_name" >> pid4.txt
+      nohup python3 -u main.py > output4.log 2>&1 & echo "$!" >> pid4.txt && echo "$shape_name" >> pid4.txt
       exit 0
     fi
-    nohup python3 -u main.py > output3.log 2>&1 & echo "PID: $!" >> pid3.txt && echo "$shape_name" >> pid3.txt
+    nohup python3 -u main.py > output3.log 2>&1 & echo "$!" >> pid3.txt && echo "$shape_name" >> pid3.txt
     exit 0
   fi
-  nohup python3 -u main.py > output2.log 2>&1 & echo "PID: $!" >> pid2.txt && echo "$shape_name" >> pid2.txt
+  nohup python3 -u main.py > output2.log 2>&1 & echo "$!" >> pid2.txt && echo "$shape_name" >> pid2.txt
   exit 0
 fi
-nohup python3 -u main.py > output1.log 2>&1 & echo "PID: $!" >> pid1.txt && echo "$shape_name" >> pid1.txt
+nohup python3 -u main.py > output1.log 2>&1 & echo "$!" >> pid1.txt && echo "$shape_name" >> pid1.txt
 exit 0
 
 
