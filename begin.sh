@@ -30,28 +30,7 @@ cd "${CURRENT_DIR}" || exit
 # 定义 PID 文件列表
 pid_files=("pid1.txt" "pid2.txt" "pid3.txt" "pid4.txt")
 
-# 遍历每一个 pid 文件
-for pid_file in "${pid_files[@]}"; do
-  # 检查 pid 文件是否存在且不为空
-  if [ -s "$pid_file" ]; then
-    # 读取 pid 文件的第一行（进程号）
-    pid=$(head -n 1 "$pid_file")
-    
-    # 检查进程号是否存在
-    if ! ps -p "$pid" > /dev/null 2>&1; then
-      # 如果进程不存在，删除 pid 文件
-      echo "进程 $pid 不存在，删除 $pid_file"
-      rm -f "$pid_file"
-      # 删除对应的 output 文件
-      output_file="${pid_file//pid/output}"
-      output_file="${output_file/.txt/.log}"
-      if [ -f "$output_file" ]; then
-        echo "删除对应的 $output_file 文件"
-        rm -f "$output_file"
-      fi
-    fi
-  fi
-done
+
 
 # 读取 params.txt 文件的内容，检查是否包含预期的 shape_name
 if [ -f "${CURRENT_DIR}/params.txt" ]; then
@@ -97,6 +76,30 @@ else
   echo "错误: 找不到 params.txt 文件。"
   exit 1
 fi
+
+
+# 遍历每一个 pid 文件
+for pid_file in "${pid_files[@]}"; do
+  # 检查 pid 文件是否存在且不为空
+  if [ -s "$pid_file" ]; then
+    # 读取 pid 文件的第一行（进程号）
+    pid=$(head -n 1 "$pid_file")
+    
+    # 检查进程号是否存在
+    if ! ps -p "$pid" > /dev/null 2>&1; then
+      # 如果进程不存在，删除 pid 文件
+      echo "进程 $pid 不存在，删除 $pid_file"
+      rm -f "$pid_file"
+      # 删除对应的 output 文件
+      output_file="${pid_file//pid/output}"
+      output_file="${output_file/.txt/.log}"
+      if [ -f "$output_file" ]; then
+        echo "删除对应的 $output_file 文件"
+        rm -f "$output_file"
+      fi
+    fi
+  fi
+done
 
 source "${CURRENT_DIR}/venv/bin/activate"
 
