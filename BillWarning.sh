@@ -68,7 +68,7 @@ fi
 
 # 启动新的监控进程
 echo "启动新的监控进程..."
-nohup python3 -u BillWaring.py > "$LOG_FILE" 2>&1 & echo "$!" > "$PID_FILE"
+nohup python3 -u BillWarning.py > "$LOG_FILE" 2>&1 & echo "$!" > "$PID_FILE"
 
 echo "监控进程已启动，PID: $(head -n 1 "$PID_FILE")"
 exit 0
