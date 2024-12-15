@@ -1,70 +1,74 @@
 #!/bin/bash
-# 获取并输出当前工作目录 例如：/root/demo
+
+# 获取当前工作目录
 CURRENT_DIR=$(pwd)
 
-#如果不包含"demo/demo1/……"就退出
+# 检查路径是否包含 "demo"
 if [[ "$CURRENT_DIR" != *demo* ]]; then
-  echo "错误: 请确保路径正确！"
+  echo "错误: 请确保路径包含 'demo'！当前路径: $CURRENT_DIR"
   exit 1
 fi
 
-# 检查目录中是否存在 email_model.py 和 main.py 和 BillWaring.py 文件
-if [ ! -f "${CURRENT_DIR}/email_model.py" ] || [ ! -f "${CURRENT_DIR}/main.py" ] || [ ! -f "${CURRENT_DIR}/BillWaring.py" ]; then
-  echo "错误: 请确保路径正确！"
-  exit 1
-fi
+# 检查必须的 Python 文件是否存在
+REQUIRED_FILES=("email_model.py" "main.py" "BillWaring.py")
+for file in "${REQUIRED_FILES[@]}"; do
+  if [ ! -f "${CURRENT_DIR}/${file}" ]; then
+    echo "错误: 缺少文件 ${file}，请确保路径正确！"
+    exit 1
+  fi
+done
 
 EMAIL_MODEL_FILE="${CURRENT_DIR}/email_model.py"
 
-# 提取第14行
+# 提取并检查第 14 行
 LINE_14=$(sed -n '14p' "$EMAIL_MODEL_FILE")
-
-# 检查第14行
 if [[ "$LINE_14" == 'sender_password = ""' ]]; then
-    echo "警告: 未配置邮箱！！"
+  echo "警告: email_model.py 第14行未配置邮箱！"
 fi
 
-cd "${CURRENT_DIR}" || exit
+# 定义 PID 文件和日志文件路径
+PID_FILE="${CURRENT_DIR}/billWarnPID.txt"
+LOG_FILE="${CURRENT_DIR}/billWarn.log"
 
+# 检查并清理 PID 文件和日志文件
+echo "######## 检查 PID 文件 ########"
+if [ -s "$PID_FILE" ]; then
+  pid=$(head -n 1 "$PID_FILE")
 
-# 定义 PID 文件列表
-pid_file=("billWarnPID.txt")
-
-
-
-# 遍历每一个 pid 文件
-echo "########遍历 pid 文件########"
-# 检查 pid 文件是否存在且不为空
-if [ -s "$pid_file" ]; then
-  # 读取 pid 文件的第一行（进程号）
-  pid=$(head -n 1 "$pid_file")
-
-  # 检查进程号是否存在
+  # 检查对应的进程是否存在
   if ! ps -p "$pid" > /dev/null 2>&1; then
-    # 如果进程不存在，删除 pid 文件
-    echo "进程 $pid 不存在，删除 $pid_file"
-    rm -f "$pid_file"
+    echo "进程 $pid 不存在，清理 PID 文件: $PID_FILE"
+    rm -f "$PID_FILE"
 
-    # 删除对应的 output 文件
-    #output_file="${pid_file//pid/output}"
-    output_file="${billWarn/.txt/.log}"
-    if [ -f "$output_file" ]; then
-      echo "删除对应的 $output_file 文件"
-      rm -f "$output_file"
+    # 删除对应的日志文件
+    if [ -f "$LOG_FILE" ]; then
+      echo "删除对应的日志文件: $LOG_FILE"
+      rm -f "$LOG_FILE"
     fi
   fi
-
+else
+  echo "开始"
 fi
 echo "##########################"
 
+# 检查并激活虚拟环境
+VENV_PATH="${CURRENT_DIR}/venv/bin/activate"
+if [ -f "$VENV_PATH" ]; then
+  source "$VENV_PATH"
+else
+  echo "错误: 虚拟环境未找到: ${VENV_PATH}"
+  exit 1
+fi
 
-source "${CURRENT_DIR}/venv/bin/activate"
-
-if [ -f "${CURRENT_DIR}/billWarn.log" ]; then
-  echo "已存在一个监控进程!"
+# 检查是否已有监控进程
+if [ -f "$LOG_FILE" ]; then
+  echo "已存在一个监控进程，日志文件: $LOG_FILE"
   exit 0
 fi
-nohup python3 -u BillWarning.py > billWarn.log 2>&1 & echo "$!" >> billWarnPID.txt
+
+# 启动新的监控进程
+echo "启动新的监控进程..."
+nohup python3 -u BillWaring.py > "$LOG_FILE" 2>&1 & echo "$!" > "$PID_FILE"
+
+echo "监控进程已启动，PID: $(head -n 1 "$PID_FILE")"
 exit 0
-
-
