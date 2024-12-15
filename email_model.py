@@ -18,7 +18,9 @@ subject_succeed = "(^o^)实例创建成功！！！"
 body_succeed = "恭喜创建成功！！！"
 
 subject_fail = "创建失败(╯︵╰),出现未知错误。。。"
-body_fail = "由于出现了意外错误，进程被意外终止。\t错误代码:"
+body_fail = "由于出现了意外错误，进程被意外终止。\n错误代码:"
+
+bill_topic = "正在监控账单！！！\n"
 
 
 def email_send(subject, body):

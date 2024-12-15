@@ -752,18 +752,27 @@ def get_security_policies():
 
 def get_BillWarning():
     while 1:
+        # 获取当前时间
+        current_time_utc = datetime.datetime.now(pytz.utc)
+        # 转换为UTC+8时区
+        china_tz = pytz.timezone('Asia/Shanghai')
+        timestamp = current_time_utc.astimezone(china_tz)
         aBill = get_currentMonthBill().items[0]
         if (aBill.currency == "HKD"):
-            print("租户:" + str(get_tenancy()) + "\nHKD:" + str(aBill.computed_amount))
+            print("时间:" + str(timestamp) + "\n租户:" + str(get_tenancy()) + "\nHKD:" + str(aBill.computed_amount))
+            body_billMsg = "租户:" + str(get_tenancy()) + "\nHKD:" + str(round(aBill.computed_amount, 2))
+            email_model.email_send(email_model.bill_topic, body_billMsg)
             time.sleep(3600*12)
 
         if (aBill.currency == "SGD"):
-            print("租户:" + str(get_tenancy()) + "\nSGD:" + str(aBill.computed_amount))
+            print("时间:" + str(timestamp) + "\n租户:" + str(get_tenancy()) + "\nSGD:" + str(aBill.computed_amount))
+            body_billMsg = "租户:" + str(get_tenancy()) + "\nSGD:" + str(round(aBill.computed_amount, 2))
+            email_model.email_send(email_model.bill_topic, body_billMsg)
             time.sleep(3600*12)
 
 
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
     # @ 1:
     # 验证 config!! 配置文件加载没问题则不报错
     # validate_config(config)
@@ -780,13 +789,12 @@ if __name__ == '__main__':
 
     # @ 3:
     # 创建实例（抢鸡）
-    params = read_params_from_file(file_path)  # 读取形参的值（你要抢的配置）
-    creat_instance(**params)
+    # params = read_params_from_file(file_path)  # 读取形参的值（你要抢的配置）
+    # creat_instance(**params)
 
     # @ 4:
     # 账单监控
-    # params = read_params_from_file(file_path)
-    # creat_instance(**params)
+    # get_BillWarning()
 
     # @测试
     # get_tenancy()
