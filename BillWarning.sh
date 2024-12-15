@@ -64,7 +64,7 @@ if [ -f "${CURRENT_DIR}/billWarn.log" ]; then
   echo "已存在一个监控进程!"
   exit 0
 fi
-nohup python3 -u BillWaring.py > billWarn.log 2>&1 & echo "$!" >> billWarnPID.txt
+nohup python3 -u BillWarning.py > billWarn.log 2>&1 & echo "$!" >> billWarnPID.txt
 exit 0
 
 
