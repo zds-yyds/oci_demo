@@ -10,7 +10,7 @@ if [[ "$CURRENT_DIR" != *demo* ]]; then
 fi
 
 # 检查必须的 Python 文件是否存在
-REQUIRED_FILES=("email_model.py" "main.py" "BillWaring.py")
+REQUIRED_FILES=("email_model.py" "main.py" "BillWarning.py")
 for file in "${REQUIRED_FILES[@]}"; do
   if [ ! -f "${CURRENT_DIR}/${file}" ]; then
     echo "错误: 缺少文件 ${file}，请确保路径正确！"
