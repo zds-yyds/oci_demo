@@ -13,6 +13,7 @@ from oci.core.models import InstanceSourceViaImageDetails
 import time
 import oci
 import pytz
+import json
 
 # 管理组？到时候分配给新建用户administrators权限
 group_name = "Administrators"
@@ -118,6 +119,12 @@ def get_compute_config():
 
     # 关闭 ComputeClient 客户端
 
+
+def get_tenancy():
+    identity_client = get_identityClient()
+    tenancy = identity_client.get_tenancy(get_compartment_id()) #传入租户ID
+    # print(tenancy.data.description)
+    return tenancy.data.description
 
 def get_availability_domain():  # 所有可用域作为数组返回
     # 创建 IdentityClient 客户端
@@ -375,7 +382,7 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                         time.sleep(60)
                         instance = instance_response.data
                         instance_id = str(instance.id)
-                        body_succeed = body_succeed + "\n时间:" + str(timestamp) + "\n区域:" + ad + "\n实例名称:" + str(
+                        body_succeed = body_succeed + "\n时间:" + str(timestamp) + "\n租户:" + str(get_tenancy()) + "\n区域:" + ad + "\n实例名称:" + str(
                             instance.display_name) + "\n可用性域:" + str(
                             instance.availability_domain) + "\n实例类型:" + str(
                             instance.shape) + "\nOCPU个数:" + str(instance.shape_config.ocpus) + "\n内存(GB):" + str(
@@ -403,17 +410,30 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                         time.sleep(frequency)
                     elif status == 429:
                         print(str(timestamp) + "--创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
+                        numb1 = numb1 + 1
                         time.sleep(frequency)
                     elif status == 404:
                         print(str(timestamp) + "--创建失败(╯︵╰)---当前可用性域:" + ad + "  下无  " + str(shape_name))
                     elif status == 400:
                         print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                         time.sleep(frequency)
+                    elif status == 401:
+                        print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code) + ",当前API无权限。")
+                        body_fail += str(status) + "\n时间:" + str(
+                            timestamp) + "\n区域:" + ad + "\n正在创建---配置:" + shape_name + "  ocpu:" + str(
+                            instance_ocpus) + "  内存(GB):" + str(
+                            instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs) + "\n" + str(e)
+                        email_model.email_send(subject_fail, body_fail)
+                        time.sleep(frequency)
+                        break
                     elif status == 502:
                         print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                         time.sleep(frequency)
                     elif status == 503:
                         print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
+                        time.sleep(frequency)
+                    elif status is None:
+                        print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code) + str(e))
                         time.sleep(frequency)
                     else:
                         print(str(timestamp) + "--出现未知错误。。。错误代码: " + str(status) + "\n" + str(e))
@@ -444,7 +464,7 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                     time.sleep(60)
                     instance = instance_response.data
                     instance_id = str(instance.id)
-                    body_succeed = body_succeed + "\n时间:" + str(timestamp) + "\n区域:" + ad1 + "\n实例名称:" + str(
+                    body_succeed = body_succeed + "\n时间:" + str(timestamp) + "\n租户:" + str(get_tenancy()) + "\n区域:" + ad1 + "\n实例名称:" + str(
                         instance.display_name) + "\n可用性域:" + str(
                         instance.availability_domain) + "\n实例类型:" + str(
                         instance.shape) + "\nOCPU个数:" + str(instance.shape_config.ocpus) + "\n内存(GB):" + str(
@@ -471,15 +491,31 @@ def creat_instance(shape_name, instance_ocpus, instance_memory_in_gbs, boot_volu
                     time.sleep(frequency)
                 elif status == 429:
                     print(str(timestamp) + "--创建失败(╯︵╰)---当前抢机速度过快，请尝试降低速度。。。")
+                    numb1 = numb + 1
+                    time.sleep(frequency)
+                elif status == 404:
+                    print(str(timestamp) + "--创建失败(╯︵╰)---当前可用性域:" + ad1 + "  下无  " + str(shape_name))
                     time.sleep(frequency)
                 elif status == 400:
                     print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                     time.sleep(frequency)
+                elif status == 401:
+                    print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code) + ",当前API无权限。")
+                    body_fail += str(status) + "\n时间:" + str(
+                        timestamp) + "\n区域:" + ad1 + "\n正在创建---配置:" + shape_name + "  ocpu:" + str(
+                        instance_ocpus) + "  内存(GB):" + str(
+                        instance_memory_in_gbs) + "  引导卷(GB):" + str(boot_volume_size_in_gbs) + "\n" + str(e)
+                    email_model.email_send(subject_fail, body_fail)
+                    time.sleep(frequency)
+                    break
                 elif status == 502:
                     print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
                     time.sleep(frequency)
                 elif status == 503:
                     print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code))
+                    time.sleep(frequency)
+                elif status is None:
+                    print(str(timestamp) + "--创建失败(╯︵╰)---错误类型:" + str(code) + str(e))
                     time.sleep(frequency)
                 else:
                     print("出现未知错误。。。错误代码:" + str(status) + "\n" + str(e))
@@ -506,6 +542,30 @@ def get_identityClient():
     identity = IdentityClient(get_config(file_location))
     return identity
 
+def get_usageClient():
+    # 创建 UsageAPI 客户端
+    usage_client  = oci.usage_api.UsageapiClient(get_config(file_location))
+    return usage_client
+
+# 设置当前月份的时间范围
+def get_currentMonthBill():
+    usage_client = get_usageClient()
+
+    # 设置当前月份的时间范围
+    now = datetime.datetime.utcnow()
+    start_time = datetime.datetime(now.year, now.month, 1)  # 月初
+    end_time = datetime.datetime(now.year, now.month, now.day)  # 当天
+    # 请求账单参数
+    usage_request = oci.usage_api.models.RequestSummarizedUsagesDetails(
+        tenant_id=get_compartment_id(),  # 租户OCID
+        time_usage_started=start_time,
+        time_usage_ended=end_time,
+        granularity="DAILY",  # 或者 "MONTHLY"
+        is_aggregate_by_time=True
+    )
+    response = usage_client.request_summarized_usages(usage_request)
+    #print(response.data)
+    return response.data
 
 def get_compartment_id():
     # 租户id
@@ -690,6 +750,19 @@ def get_security_policies():
     return response.data
 
 
+def get_BillWarning():
+    while 1:
+        aBill = get_currentMonthBill().items[0]
+        if (aBill.currency == "HKD"):
+            print("租户:" + str(get_tenancy()) + "\nHKD:" + str(aBill.computed_amount))
+            time.sleep(3600*12)
+
+        if (aBill.currency == "SGD"):
+            print("租户:" + str(get_tenancy()) + "\nSGD:" + str(aBill.computed_amount))
+            time.sleep(3600*12)
+
+
+
 if __name__ == '__main__':
     # @ 1:
     # 验证 config!! 配置文件加载没问题则不报错
@@ -702,11 +775,20 @@ if __name__ == '__main__':
 
     # @ 3:
     # 删除用户 ,顺带加上admin权限
-    # my_email="XXXXX@xx.com"
+    # my_email="yourEmail@yourEmail.com"
     # delete_user(my_email)
 
     # @ 3:
     # 创建实例（抢鸡）
     params = read_params_from_file(file_path)  # 读取形参的值（你要抢的配置）
     creat_instance(**params)
+
+    # @ 4:
+    # 账单监控
+    # params = read_params_from_file(file_path)
+    # creat_instance(**params)
+
+    # @测试
+    # get_tenancy()
+    # get_BillWarning()
 
