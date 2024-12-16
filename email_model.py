@@ -48,7 +48,7 @@ def email_send(subject, body):
         print("邮件发送失败:", str(e))
 
 
-def email_send_with_attachment(subject, body, attachment_path):
+def email_send_with_attachments(subject, body, attachment_paths):
     message = MIMEMultipart()
     message["From"] = sender_email
     message["To"] = receiver_email
@@ -57,31 +57,36 @@ def email_send_with_attachment(subject, body, attachment_path):
     # 邮件正文部分
     message.attach(MIMEText(body, "plain"))
 
-    # 附件部分
+    # 遍历所有附件路径
+    for attachment_path in attachment_paths:
+        try:
+            with open(attachment_path, "rb") as attachment_file:
+                # 创建附件对象
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(attachment_file.read())
+
+                # 编码附件
+                encoders.encode_base64(part)
+
+                # 设置附件的头信息
+                part.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename={attachment_path.split('/')[-1]}",
+                )
+
+                # 将附件添加到邮件中
+                message.attach(part)
+
+        except Exception as e:
+            print(f"附件 {attachment_path} 添加失败: {str(e)}")
+
+    # 连接到SMTP服务器并发送邮件
     try:
-        with open(attachment_path, "rb") as attachment_file:
-            # 创建附件对象
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(attachment_file.read())
-
-            # 编码附件
-            encoders.encode_base64(part)
-
-            # 设置附件的头信息
-            part.add_header(
-                "Content-Disposition",
-                f"attachment; filename={attachment_path.split('/')[-1]}",
-            )
-
-            # 将附件添加到邮件中
-            message.attach(part)
-
-        # 连接到SMTP服务器并发送邮件
         with smtplib.SMTP(smtp_server, smtp_port) as server:
             server.starttls()  # 启用TLS加密
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, receiver_email, message.as_string())
+            server.quit()
             print("邮件发送成功！")
-
     except Exception as e:
         print("邮件发送失败:", str(e))

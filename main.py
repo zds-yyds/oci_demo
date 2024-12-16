@@ -1,6 +1,6 @@
 # 这是一个示例 Python 脚本。
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 import datetime
 import email_model
 from oci.identity import IdentityClient
@@ -17,6 +17,7 @@ import pytz
 import json
 from currency_converter import CurrencyConverter
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # 管理组？到时候分配给新建用户administrators权限
 group_name = "Administrators"
@@ -563,8 +564,8 @@ def get_currentMonthBill():
         tenant_id=get_compartment_id(),  # 租户OCID
         time_usage_started=start_time,
         time_usage_ended=end_time,
-        granularity="DAILY",  # 或者 "MONTHLY"
-        is_aggregate_by_time=True
+        granularity="DAILY"
+        #is_aggregate_by_time=True
     )
     response = usage_client.request_summarized_usages(usage_request)
     #print(response.data)
@@ -768,11 +769,13 @@ def read_ToJson():
         with open(file_path, 'r', encoding='utf-8') as file:
             for line in file:
                 line = line.strip()  # 去除每行的前后空白字符
-                if line.startswith("时间:"):
+                if line.startswith("开始时间:"):
                     # 如果当前有数据，则保存它
                     if current_entry:
                         log_entries.append(current_entry)
-                    current_entry = {"时间": line.split(":", 1)[1].strip()}  # 提取时间
+                    current_entry = {"开始时间": line.split(":", 1)[1].strip()}  # 提取时间
+                elif line.startswith("结束时间:"):
+                    current_entry["结束时间"] = line.split(":", 1)[1].strip()  # 提取租户
                 elif line.startswith("租户:"):
                     current_entry["租户"] = line.split(":", 1)[1].strip()  # 提取租户
                 elif line.startswith("消费CNY:"):
@@ -798,7 +801,43 @@ def jsonToExcel(json_data):
     # 将 DataFrame 保存为 Excel 文件
     output_file = 'Bill.xlsx'
     df.to_excel(output_file, index=False, engine='openpyxl')
-    return df.to_string(index=False)
+    return (df.to_string(index=False))
+
+
+def jsonToImg(json_data):
+    data = json.loads(json_data)
+    # 提取横坐标（time_usage_ended）和纵坐标（computed_amount）
+    x_values = [item["结束时间"] for item in data]
+    y_values = [item["消费CNY"] for item in data]
+    total_cost = round(sum(y_values), 2)
+
+    x_labels = [date.split(" ")[0] for date in x_values]
+    # 绘制折线图
+    plt.figure(figsize=(16.18, 10))  # 设置画布大小
+    plt.plot(x_values, y_values, marker='o', linestyle='-', color='b', label='COST')
+
+    # 优化横坐标
+    # 设置横坐标间隔：隔 5 个显示 1 个
+    step = 2  # 每隔 5 个显示一个
+    plt.xticks(ticks=range(0, len(x_labels), step), labels=x_labels[::step], rotation=45)
+
+    # 设置标题和坐标轴标签
+    plt.title("cost-time(" + get_tenancy() + ")(total:" + str(total_cost) + ")", fontsize=20)
+    plt.xlabel("time", fontsize=10)
+    plt.ylabel("COST-CNY", fontsize=12)
+
+    # 优化 x 轴显示（旋转日期标签）
+    #plt.xticks(rotation=45)
+
+    # 添加网格线和图例
+    plt.grid(alpha=0.3)
+    plt.legend()
+
+    # 保存图片到文件（可选）
+    plt.savefig("cost_over_time.png", dpi=300)
+
+    # 显示图像
+    plt.show()
 
 def get_BillWarning():
     while 1:
@@ -807,26 +846,37 @@ def get_BillWarning():
         # 转换为UTC+8时区
         china_tz = pytz.timezone('Asia/Shanghai')
         timestamp = current_time_utc.astimezone(china_tz)
-        aBill = get_currentMonthBill().items[0]
+        aBill = get_currentMonthBill().items
+        sorted_aBill = sorted(aBill, key=lambda x: x.time_usage_started)
+        #print(sorted_data)
         c = CurrencyConverter()
+        file_path = 'billWarn.log'
+        # 检查文件是否存在
+        if os.path.exists(file_path):
+            # 如果文件存在，删除该文件
+            os.remove(file_path)
 
-        amount = aBill.computed_amount
-        converted_amount = c.convert(amount, aBill.currency, 'CNY')
+        for bill in sorted_aBill:
+            amount = bill.computed_amount
+            converted_amount = c.convert(amount, bill.currency, 'CNY')
+            print(
+                "开始时间:" + str(bill.time_usage_started) + "\n结束时间:" + str(bill.time_usage_ended) + "\n租户:" + str(get_tenancy()) + "\n消费CNY:" + str(round(converted_amount, 2)) + "\n")
 
-        print("时间:" + str(timestamp) + "\n租户:" + str(get_tenancy()) + "\n消费CNY:" + str(converted_amount) + "\n")
         time.sleep(2)
         billJson = read_ToJson()
         billMsg = jsonToExcel(billJson)
+        jsonToImg(billJson)
 
         #body_billMsg = billMsg
-        if os.path.exists("Bill.xlsx"):
-            email_model.email_send_with_attachment(email_model.bill_topic, billMsg,"Bill.xlsx")
+        attachment_files = ["Bill.xlsx", "cost_over_time.png"]
+        if os.path.exists("Bill.xlsx") and os.path.exists("cost_over_time.png"):
+            email_model.email_send_with_attachments(email_model.bill_topic, billMsg, attachment_files)
         else:
             email_model.email_send(email_model.bill_topic, billMsg)
-        time.sleep(3600 * 12)
+        time.sleep(3600 * 24)
 
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
     # @ 1:
     # 验证 config!! 配置文件加载没问题则不报错
     # validate_config(config)
@@ -852,5 +902,5 @@ def get_BillWarning():
 
     # @测试
     # get_tenancy()
-    # get_BillWarning()
+    get_BillWarning()
 
