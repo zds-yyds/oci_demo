@@ -1,4 +1,5 @@
 # 这是一个示例 Python 脚本。
+import os
 from datetime import datetime
 import datetime
 import email_model
@@ -14,6 +15,8 @@ import time
 import oci
 import pytz
 import json
+from currency_converter import CurrencyConverter
+import pandas as pd
 
 # 管理组？到时候分配给新建用户administrators权限
 group_name = "Administrators"
@@ -750,6 +753,53 @@ def get_security_policies():
     return response.data
 
 
+def read_ToJson():
+    # 文件路径（当前目录下的 billWarn.log 文件）
+    file_path = 'billWarn.log'
+
+    # 检查文件是否存在
+    if os.path.exists(file_path):
+        # 创建一个空列表来存储所有日志记录
+        log_entries = []
+
+        # 临时字典存储每条记录的字段
+        current_entry = {}
+        # 读取并遍历每一行
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line in file:
+                line = line.strip()  # 去除每行的前后空白字符
+                if line.startswith("时间:"):
+                    # 如果当前有数据，则保存它
+                    if current_entry:
+                        log_entries.append(current_entry)
+                    current_entry = {"时间": line.split(":", 1)[1].strip()}  # 提取时间
+                elif line.startswith("租户:"):
+                    current_entry["租户"] = line.split(":", 1)[1].strip()  # 提取租户
+                elif line.startswith("消费CNY:"):
+                    current_entry["消费CNY"] = float(line.split(":", 1)[1].strip())  # 提取消费金额
+
+            # 处理最后一条记录
+            if current_entry:
+                log_entries.append(current_entry)
+
+        # 将结果转换为 JSON 格式
+        json_output = json.dumps(log_entries, ensure_ascii=False, indent=4)
+
+        # 打印读取到的内容（可以选择性地打印）
+        # print(json_output)
+        return json_output
+
+
+
+
+def jsonToExcel(json_data):
+    data = json.loads(json_data)
+    df = pd.DataFrame(data)
+    # 将 DataFrame 保存为 Excel 文件
+    output_file = 'Bill.xlsx'
+    df.to_excel(output_file, index=False, engine='openpyxl')
+    return df.to_string(index=False)
+
 def get_BillWarning():
     while 1:
         # 获取当前时间
@@ -758,18 +808,22 @@ def get_BillWarning():
         china_tz = pytz.timezone('Asia/Shanghai')
         timestamp = current_time_utc.astimezone(china_tz)
         aBill = get_currentMonthBill().items[0]
-        if (aBill.currency == "HKD"):
-            print("时间:" + str(timestamp) + "\n租户:" + str(get_tenancy()) + "\nHKD:" + str(aBill.computed_amount))
-            body_billMsg = "租户:" + str(get_tenancy()) + "\nHKD:" + str(round(aBill.computed_amount, 2))
-            email_model.email_send(email_model.bill_topic, body_billMsg)
-            time.sleep(3600*12)
+        c = CurrencyConverter()
 
-        if (aBill.currency == "SGD"):
-            print("时间:" + str(timestamp) + "\n租户:" + str(get_tenancy()) + "\nSGD:" + str(aBill.computed_amount))
-            body_billMsg = "租户:" + str(get_tenancy()) + "\nSGD:" + str(round(aBill.computed_amount, 2))
-            email_model.email_send(email_model.bill_topic, body_billMsg)
-            time.sleep(3600*12)
+        amount = aBill.computed_amount
+        converted_amount = c.convert(amount, aBill.currency, 'CNY')
 
+        print("时间:" + str(timestamp) + "\n租户:" + str(get_tenancy()) + "\n消费CNY:" + str(converted_amount) + "\n")
+        time.sleep(2)
+        billJson = read_ToJson()
+        billMsg = jsonToExcel(billJson)
+
+        #body_billMsg = billMsg
+        if os.path.exists("Bill.xlsx"):
+            email_model.email_send_with_attachment(email_model.bill_topic, billMsg,"Bill.xlsx")
+        else:
+            email_model.email_send(email_model.bill_topic, billMsg)
+        time.sleep(3600 * 12)
 
 
 # if __name__ == '__main__':

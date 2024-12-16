@@ -1,6 +1,8 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 # 发件人和收件人邮箱地址
 sender_email = "1535726542@qq.com"
@@ -46,4 +48,40 @@ def email_send(subject, body):
         print("邮件发送失败:", str(e))
 
 
-# email_send(subject_fail, body_fail)
+def email_send_with_attachment(subject, body, attachment_path):
+    message = MIMEMultipart()
+    message["From"] = sender_email
+    message["To"] = receiver_email
+    message["Subject"] = subject
+
+    # 邮件正文部分
+    message.attach(MIMEText(body, "plain"))
+
+    # 附件部分
+    try:
+        with open(attachment_path, "rb") as attachment_file:
+            # 创建附件对象
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment_file.read())
+
+            # 编码附件
+            encoders.encode_base64(part)
+
+            # 设置附件的头信息
+            part.add_header(
+                "Content-Disposition",
+                f"attachment; filename={attachment_path.split('/')[-1]}",
+            )
+
+            # 将附件添加到邮件中
+            message.attach(part)
+
+        # 连接到SMTP服务器并发送邮件
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()  # 启用TLS加密
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, receiver_email, message.as_string())
+            print("邮件发送成功！")
+
+    except Exception as e:
+        print("邮件发送失败:", str(e))
