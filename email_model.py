@@ -81,6 +81,7 @@ def email_send_with_attachment(subject, body, attachment_path):
             server.starttls()  # 启用TLS加密
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, receiver_email, message.as_string())
+            server.quit()
             print("邮件发送成功！")
 
     except Exception as e:

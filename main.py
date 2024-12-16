@@ -798,7 +798,7 @@ def jsonToExcel(json_data):
     # 将 DataFrame 保存为 Excel 文件
     output_file = 'Bill.xlsx'
     df.to_excel(output_file, index=False, engine='openpyxl')
-    return df.to_string(index=False)
+    return (df.to_string(index=False))
 
 def get_BillWarning():
     while 1:
