@@ -876,31 +876,31 @@ def get_BillWarning():
         time.sleep(3600 * 24)
 
 
-if __name__ == '__main__':
-    # @ 1:
-    # 验证 config!! 配置文件加载没问题则不报错
-    # validate_config(config)
-
-    # @ 2:
-    # 创建用户 ,顺带加上admin权限
-    # you_email="XXXXX@xx.com"
-    # creat_user(you_email)
-
-    # @ 3:
-    # 删除用户 ,顺带加上admin权限
-    # my_email="yourEmail@yourEmail.com"
-    # delete_user(my_email)
-
-    # @ 3:
-    # 创建实例（抢鸡）
-    # params = read_params_from_file(file_path)  # 读取形参的值（你要抢的配置）
-    # creat_instance(**params)
-
-    # @ 4:
-    # 账单监控
-    # get_BillWarning()
-
-    # @测试
-    # get_tenancy()
-    get_BillWarning()
+# if __name__ == '__main__':
+#     # @ 1:
+#     # 验证 config!! 配置文件加载没问题则不报错
+#     # validate_config(config)
+#
+#     # @ 2:
+#     # 创建用户 ,顺带加上admin权限
+#     # you_email="XXXXX@xx.com"
+#     # creat_user(you_email)
+#
+#     # @ 3:
+#     # 删除用户 ,顺带加上admin权限
+#     # my_email="yourEmail@yourEmail.com"
+#     # delete_user(my_email)
+#
+#     # @ 3:
+#     # 创建实例（抢鸡）
+#     # params = read_params_from_file(file_path)  # 读取形参的值（你要抢的配置）
+#     # creat_instance(**params)
+#
+#     # @ 4:
+#     # 账单监控
+#     # get_BillWarning()
+#
+#     # @测试
+#     # get_tenancy()
+#     get_BillWarning()
 
