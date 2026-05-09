@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: oci-manager-db
+    restart: unless-stopped
+    environment:
+      # Docker 里直接用 DB_USER 作为超级用户，省去额外权限问题
+      POSTGRES_USER: ${DB_USER:-oci}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-oci123}
+      POSTGRES_DB: oci_manager
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - oci-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-oci} -d oci_manager"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oci-manager-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-oci}
+      - DB_PASSWORD=${DB_PASSWORD:-oci123}
+      - DB_NAME=oci_manager
+      # Docker 里 POSTGRES_USER 本身就是超级用户，直接复用
+      - PG_ROOT_USER=${DB_USER:-oci}
+      - PG_ROOT_PASSWORD=${DB_PASSWORD:-oci123}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    networks:
+      - oci-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: oci-manager-frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:80"
+    depends_on:
+      - backend
+    networks:
+      - oci-net
+
+volumes:
+  pg_data:
+
+networks:
+  oci-net:
+    driver: bridge

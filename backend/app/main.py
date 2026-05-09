@@ -1,0 +1,117 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import create_async_engine
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import logging
+
+from app.database import init_db, AsyncSessionLocal
+from app import models
+from app.auth import hash_password
+from app.config import settings
+from app.routers import auth, users, tenants, instances, snipe, bills, notify
+
+logger = logging.getLogger(__name__)
+
+
+def ensure_db_exists():
+    """
+    用 psycopg2 连接到 postgres 系统库，
+    检查目标用户和数据库是否存在，不存在则创建。
+    本地和 Docker 都适用。
+    """
+    try:
+        conn = psycopg2.connect(settings.get_pg_root_url())
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cur = conn.cursor()
+
+        # 检查并创建用户
+        cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (settings.db_user,))
+        if not cur.fetchone():
+            cur.execute(
+                f"CREATE USER {settings.db_user} WITH PASSWORD %s",
+                (settings.db_password,)
+            )
+            logger.info(f"已创建数据库用户: {settings.db_user}")
+        else:
+            logger.info(f"数据库用户已存在: {settings.db_user}")
+
+        # 检查并创建数据库
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (settings.db_name,))
+        if not cur.fetchone():
+            cur.execute(
+                f'CREATE DATABASE {settings.db_name} OWNER {settings.db_user}'
+            )
+            logger.info(f"已创建数据库: {settings.db_name}")
+        else:
+            logger.info(f"数据库已存在: {settings.db_name}")
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"自动建库跳过（可能已存在或无 superuser 权限）: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 1. 自动建库建用户（不存在才建）
+    ensure_db_exists()
+
+    # 2. 建表
+    await init_db()
+
+    # 3. 创建默认管理员
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(models.User).where(models.User.username == settings.admin_username)
+        )
+        if not result.scalar_one_or_none():
+            admin = models.User(
+                username=settings.admin_username,
+                hashed_password=hash_password(settings.admin_password),
+                is_admin=True,
+            )
+            db.add(admin)
+            await db.commit()
+            logger.info(f"已创建默认管理员: {settings.admin_username}")
+    yield
+
+
+app = FastAPI(
+    title="OCI Manager",
+    description="Oracle Cloud Infrastructure 多租户管理平台",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(tenants.router)
+app.include_router(instances.router)
+app.include_router(snipe.router)
+app.include_router(bills.router)
+app.include_router(notify.router)
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "version": "1.0.0"}
+
+
+if __name__ == "__main__":
+    import sys, os
+    # 确保从 backend/ 目录运行，无论 PyCharm 工作目录怎么设
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
