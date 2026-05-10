@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_password: str = "admin123"
 
+    # CORS 允许的来源，多个用逗号分隔，例如 https://a.com,https://b.com
+    cors_origins: str = "*"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
