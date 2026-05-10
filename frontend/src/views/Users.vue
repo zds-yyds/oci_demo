@@ -21,21 +21,34 @@
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column label="操作" width="160">
           <template #default="{ row }">
-            <el-button text size="small" type="danger" @click="deleteUser(row)">删除</el-button>
+            <div style="white-space:nowrap">
+              <el-button text size="small" @click="openEdit(row)">
+                <el-icon><Edit /></el-icon> 编辑
+              </el-button>
+              <el-button text size="small" type="danger" @click="deleteUser(row)">
+                <el-icon><Delete /></el-icon> 删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="新建用户" width="420px">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="90px">
+    <!-- Add/Edit Dialog -->
+    <el-dialog v-model="dialogVisible" :title="editId ? '编辑用户' : '新建用户'" width="420px">
+      <el-form :model="form" :rules="currentRules" ref="formRef" label-width="90px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="form.username" />
         </el-form-item>
         <el-form-item label="密码" prop="password">
-          <el-input v-model="form.password" type="password" show-password />
+          <el-input
+            v-model="form.password"
+            type="password"
+            show-password
+            :placeholder="editId ? '留空表示不修改' : ''"
+          />
         </el-form-item>
         <el-form-item label="管理员">
           <el-switch v-model="form.is_admin" />
@@ -43,14 +56,16 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">创建</el-button>
+        <el-button type="primary" :loading="saving" @click="save">
+          {{ editId ? '保存' : '创建' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
@@ -62,12 +77,18 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const saving = ref(false)
 const formRef = ref()
+const editId = ref(null)
 
 const form = reactive({ username: '', password: '', is_admin: false })
-const rules = {
+
+const addRules = {
   username: [{ required: true, message: '请输入用户名' }],
   password: [{ required: true, message: '请输入密码', min: 6 }],
 }
+const editRules = {
+  username: [{ required: true, message: '请输入用户名' }],
+}
+const currentRules = computed(() => editId.value ? editRules : addRules)
 
 function formatDate(d) { return dayjs(d).format('YYYY-MM-DD HH:mm') }
 
@@ -82,7 +103,14 @@ async function load() {
 }
 
 function openAdd() {
+  editId.value = null
   Object.assign(form, { username: '', password: '', is_admin: false })
+  dialogVisible.value = true
+}
+
+function openEdit(row) {
+  editId.value = row.id
+  Object.assign(form, { username: row.username, password: '', is_admin: row.is_admin })
   dialogVisible.value = true
 }
 
@@ -90,10 +118,20 @@ async function save() {
   await formRef.value.validate()
   saving.value = true
   try {
-    await api.post('/users', form)
-    ElMessage.success('用户创建成功')
+    if (editId.value) {
+      const payload = { username: form.username, is_admin: form.is_admin }
+      if (form.password) payload.password = form.password
+      await api.put(`/users/${editId.value}`, payload)
+      ElMessage.success('用户更新成功')
+    } else {
+      await api.post('/users', form)
+      ElMessage.success('用户创建成功')
+    }
     dialogVisible.value = false
     load()
+  } catch (err) {
+    const msg = err.response?.data?.detail || '操作失败'
+    ElMessage.error(msg)
   } finally {
     saving.value = false
   }

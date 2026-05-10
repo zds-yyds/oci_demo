@@ -27,20 +27,25 @@
         <el-table-column prop="created_at" label="创建时间" width="170">
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
-            <el-button text size="small" @click="$router.push(`/instances/${row.id}`)">
-              <el-icon><Monitor /></el-icon> 实例
-            </el-button>
-            <el-button text size="small" @click="testConn(row)">
-              <el-icon><Connection /></el-icon> 测试
-            </el-button>
-            <el-button text size="small" @click="openEdit(row)">
-              <el-icon><Edit /></el-icon> 编辑
-            </el-button>
-            <el-button text size="small" type="danger" @click="deleteTenant(row)">
-              <el-icon><Delete /></el-icon> 删除
-            </el-button>
+            <div style="white-space:nowrap">
+              <el-button text size="small" @click="$router.push(`/instances/${row.id}`)">
+                <el-icon><Monitor /></el-icon> 实例
+              </el-button>
+              <el-button text size="small" @click="$router.push(`/oci-users/${row.id}`)">
+                <el-icon><User /></el-icon> 用户
+              </el-button>
+              <el-button text size="small" @click="testConn(row)">
+                <el-icon><Connection /></el-icon> 测试
+              </el-button>
+              <el-button text size="small" @click="openEdit(row)">
+                <el-icon><Edit /></el-icon> 编辑
+              </el-button>
+              <el-button text size="small" type="danger" @click="deleteTenant(row)">
+                <el-icon><Delete /></el-icon> 删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>

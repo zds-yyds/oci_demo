@@ -11,7 +11,7 @@ from app.database import init_db, AsyncSessionLocal
 from app import models
 from app.auth import hash_password
 from app.config import settings
-from app.routers import auth, users, tenants, instances, snipe, bills, notify, regions
+from app.routers import auth, users, tenants, instances, snipe, bills, notify, regions, oci_users
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,7 @@ app.include_router(snipe.router)
 app.include_router(bills.router)
 app.include_router(notify.router)
 app.include_router(regions.router)
+app.include_router(oci_users.router)
 
 
 @app.get("/api/health")

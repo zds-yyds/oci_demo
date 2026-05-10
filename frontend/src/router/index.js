@@ -16,6 +16,7 @@ const routes = [
       { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
       { path: 'tenants', name: 'Tenants', component: () => import('@/views/Tenants.vue') },
       { path: 'instances/:tenantId', name: 'Instances', component: () => import('@/views/Instances.vue') },
+      { path: 'oci-users/:tenantId', name: 'OciUsers', component: () => import('@/views/OciUsers.vue') },
       { path: 'snipe', name: 'Snipe', component: () => import('@/views/Snipe.vue') },
       { path: 'bills', name: 'Bills', component: () => import('@/views/Bills.vue') },
       { path: 'notify', name: 'Notify', component: () => import('@/views/Notify.vue') },

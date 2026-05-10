@@ -64,6 +64,37 @@ async def delete_user(
     return {"message": "删除成功"}
 
 
+@router.put("/{user_id}", response_model=schemas.UserOut)
+async def update_user(
+    user_id: int,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_admin_user),
+):
+    """编辑用户（修改密码、角色）"""
+    user = await db.get(models.User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if "password" in data and data["password"]:
+        user.hashed_password = hash_password(data["password"])
+    if "is_admin" in data:
+        # 不能取消自己的管理员权限
+        if user_id == current_user.id and not data["is_admin"]:
+            raise HTTPException(status_code=400, detail="不能取消自己的管理员权限")
+        user.is_admin = data["is_admin"]
+    if "username" in data and data["username"]:
+        # 检查用户名是否重复
+        existing = await db.execute(
+            select(models.User).where(models.User.username == data["username"], models.User.id != user_id)
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="用户名已存在")
+        user.username = data["username"]
+    await db.commit()
+    await db.refresh(user)
+    return _user_to_out(user)
+
+
 # ── 默认私钥 ──────────────────────────────────────────────────────────────────
 
 @router.get("/me/default-key", response_model=schemas.DefaultKeyOut)

@@ -38,7 +38,6 @@ def _append_log(log_lines: list, msg: str):
 def _run_snipe(task_id: int, tenant_data: dict, task_data: dict, db_url: str):
     """在独立线程中执行抢机逻辑，完成后写回数据库"""
     import oci
-    from currency_converter import CurrencyConverter
 
     log_lines = []
     _stop_flags[task_id] = False
