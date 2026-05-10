@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from typing import List
 from app.database import get_db
 from app import models, schemas
@@ -10,7 +12,9 @@ router = APIRouter(prefix="/api/instances", tags=["实例管理"])
 
 
 async def _get_tenant(tenant_id: int, db: AsyncSession, current_user: models.User) -> models.Tenant:
-    tenant = await db.get(models.Tenant, tenant_id)
+    stmt = select(models.Tenant).options(selectinload(models.Tenant.regions)).where(models.Tenant.id == tenant_id)
+    result = await db.execute(stmt)
+    tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="租户不存在")
     if not current_user.is_admin and tenant.owner_id != current_user.id:
@@ -45,7 +49,7 @@ async def do_instance_action(
     if data.action.upper() not in allowed:
         raise HTTPException(status_code=400, detail=f"不支持的操作，允许: {allowed}")
     try:
-        result = oci_client.instance_action(tenant, instance_id, data.action)
+        result = oci_client.instance_action(tenant, instance_id, data.action, region=data.region)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")

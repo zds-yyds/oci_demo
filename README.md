@@ -26,9 +26,21 @@ docker-compose up -d --build
 
 ### 3. 访问
 
-浏览器打开 `http://your-server-ip:8080`
+浏览器打开 `http://your-server-ip:81` 进入 Nginx Proxy Manager 管理面板。
 
-默认账号：`admin` / `admin123`（请立即修改密码）
+**NPM 默认账号：** `admin@example.com` / `changeme`（首次登录强制修改）
+
+**配置步骤：**
+
+1. 登录 NPM，修改默认密码
+2. 添加 Proxy Host：域名指向 `oci-manager-frontend`，端口 `80`，开启 SSL（Let's Encrypt）
+3. 再添加一个 Proxy Host：`npm.your-domain.com` → `oci-manager-npm`，端口 `81`，开启 SSL，绑定 Access List（IP 白名单）
+4. 确认通过 `https://npm.your-domain.com` 能正常访问管理面板
+5. 删掉 `docker-compose.yml` 中的 `- "81:81"` 行，重新 `docker-compose up -d`
+
+完成后只暴露 80（跳转用）和 443（HTTPS），管理面板通过域名 + SSL + IP 白名单访问。
+
+**OCI Manager 默认账号：** `admin` / `admin123`（请立即修改密码）
 
 ---
 
@@ -126,5 +138,4 @@ npm run dev
 # 访问 http://localhost:5173
 ```
 
-> `.env` 里的 `PORT=8080` 只给 Docker Nginx 用，本地开发无效。
 > 前端 Vite 默认跑 5173，后端固定 8000，`/api` 请求由 Vite 自动代理转发。

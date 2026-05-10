@@ -11,7 +11,7 @@ from app.database import init_db, AsyncSessionLocal
 from app import models
 from app.auth import hash_password
 from app.config import settings
-from app.routers import auth, users, tenants, instances, snipe, bills, notify
+from app.routers import auth, users, tenants, instances, snipe, bills, notify, regions
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,62 @@ async def lifespan(app: FastAPI):
             db.add(admin)
             await db.commit()
             logger.info(f"已创建默认管理员: {settings.admin_username}")
+
+    # 4. 初始化区域字典表
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(models.Region))
+        if not result.scalars().first():
+            _init_regions = [
+                ("eu-amsterdam-1", "Netherlands Northwest (Amsterdam)", "AMS"),
+                ("eu-stockholm-1", "Sweden Central (Stockholm)", "ARN"),
+                ("me-abudhabi-1", "UAE Central (Abu Dhabi)", "AUH"),
+                ("sa-bogota-1", "Colombia Central (Bogota)", "BOG"),
+                ("ap-mumbai-1", "India West (Mumbai)", "BOM"),
+                ("eu-paris-1", "France Central (Paris)", "CDG"),
+                ("uk-cardiff-1", "UK West (Newport)", "CWL"),
+                ("me-dubai-1", "UAE East (Dubai)", "DXB"),
+                ("eu-frankfurt-1", "Germany Central (Frankfurt)", "FRA"),
+                ("sa-saopaulo-1", "Brazil East (Sao Paulo)", "GRU"),
+                ("ap-batam-1", "Indonesia North (Batam)", "HSG"),
+                ("ap-hyderabad-1", "India South (Hyderabad)", "HYD"),
+                ("us-ashburn-1", "US East (Ashburn)", "IAD"),
+                ("ap-seoul-1", "South Korea Central (Seoul)", "ICN"),
+                ("ap-kulai-2", "Malaysia West 2 (Kulai)", "JBP"),
+                ("me-jeddah-1", "Saudi Arabia West (Jeddah)", "JED"),
+                ("af-johannesburg-1", "South Africa Central (Johannesburg)", "JNB"),
+                ("ap-osaka-1", "Japan Central (Osaka)", "KIX"),
+                ("af-casablanca-1", "Morocco West (Casablanca)", "LEJ"),
+                ("uk-london-1", "UK South (London)", "LHR"),
+                ("eu-milan-1", "Italy Northwest (Milan)", "LIN"),
+                ("eu-madrid-1", "Spain Central (Madrid)", "MAD"),
+                ("ap-melbourne-1", "Australia Southeast (Melbourne)", "MEL"),
+                ("eu-marseille-1", "France South (Marseille)", "MRS"),
+                ("mx-monterrey-1", "Mexico Northeast (Monterrey)", "MTY"),
+                ("il-jerusalem-1", "Israel Central (Jerusalem)", "MTZ"),
+                ("eu-turin-1", "Italy North (Turin)", "NRQ"),
+                ("ap-tokyo-1", "Japan East (Tokyo)", "NRT"),
+                ("us-chicago-1", "US Midwest (Chicago)", "ORD"),
+                ("eu-madrid-3", "Spain Central (Madrid 3)", "ORF"),
+                ("us-phoenix-1", "US West (Phoenix)", "PHX"),
+                ("mx-queretaro-1", "Mexico Central (Queretaro)", "QRO"),
+                ("me-riyadh-1", "Saudi Arabia Central (Riyadh)", "RUH"),
+                ("sa-santiago-1", "Chile Central (Santiago)", "SCL"),
+                ("ap-singapore-1", "Singapore (Singapore)", "SIN"),
+                ("us-sanjose-1", "US West (San Jose)", "SJC"),
+                ("ap-sydney-1", "Australia East (Sydney)", "SYD"),
+                ("sa-valparaiso-1", "Chile West (Valparaiso)", "VAP"),
+                ("sa-vinhedo-1", "Brazil Southeast (Vinhedo)", "VCP"),
+                ("ap-singapore-2", "Singapore West (Singapore)", "XSP"),
+                ("ap-chuncheon-1", "South Korea North (Chuncheon)", "YNY"),
+                ("ca-montreal-1", "Canada Southeast (Montreal)", "YUL"),
+                ("ca-toronto-1", "Canada Southeast (Toronto)", "YYZ"),
+                ("eu-zurich-1", "Switzerland North (Zurich)", "ZRH"),
+            ]
+            for identifier, name, key in _init_regions:
+                db.add(models.Region(identifier=identifier, name=name, key=key))
+            await db.commit()
+            logger.info(f"已初始化 {len(_init_regions)} 个 OCI 区域")
+
     yield
 
 
@@ -101,6 +157,7 @@ app.include_router(instances.router)
 app.include_router(snipe.router)
 app.include_router(bills.router)
 app.include_router(notify.router)
+app.include_router(regions.router)
 
 
 @app.get("/api/health")

@@ -25,13 +25,41 @@ class Tenant(Base):
     user_ocid = Column(String(256), nullable=False)
     fingerprint = Column(String(256), nullable=False)
     tenancy_ocid = Column(String(256), nullable=False)
-    region = Column(String(64), nullable=False)
     private_key = Column(Text, nullable=False)   # PEM content
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     owner = relationship("User", back_populates="tenants")
+    regions = relationship("TenantRegion", back_populates="tenant", cascade="all, delete-orphan")
     snipe_tasks = relationship("SnipeTask", back_populates="tenant")
     bill_records = relationship("BillRecord", back_populates="tenant")
+
+    @property
+    def region(self) -> str:
+        """兼容旧代码：返回逗号分隔的区域字符串"""
+        return ",".join(tr.region_identifier for tr in self.regions)
+
+    @property
+    def region_list(self) -> list:
+        """返回区域列表"""
+        return [tr.region_identifier for tr in self.regions]
+
+
+class Region(Base):
+    """OCI 区域字典表"""
+    __tablename__ = "regions"
+    id = Column(Integer, primary_key=True, index=True)
+    identifier = Column(String(64), unique=True, nullable=False)   # 如 ap-singapore-1
+    name = Column(String(128), nullable=False)                     # 如 Singapore (Singapore)
+    key = Column(String(8), nullable=False)                        # 如 SIN
+
+
+class TenantRegion(Base):
+    """租户-区域关联表"""
+    __tablename__ = "tenant_regions"
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    region_identifier = Column(String(64), ForeignKey("regions.identifier"), nullable=False)
+    tenant = relationship("Tenant", back_populates="regions")
 
 
 class SnipeTask(Base):

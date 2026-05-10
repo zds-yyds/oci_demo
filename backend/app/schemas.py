@@ -38,7 +38,7 @@ class TenantCreate(BaseModel):
     user_ocid: str
     fingerprint: str
     tenancy_ocid: str
-    region: str
+    region: List[str]   # 多个区域 identifier
     private_key: str   # PEM content
 
 
@@ -47,7 +47,7 @@ class TenantUpdate(BaseModel):
     user_ocid: Optional[str] = None
     fingerprint: Optional[str] = None
     tenancy_ocid: Optional[str] = None
-    region: Optional[str] = None
+    region: Optional[List[str]] = None
     private_key: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -55,10 +55,23 @@ class TenantUpdate(BaseModel):
 class TenantOut(BaseModel):
     id: int
     name: str
+    user_ocid: str
+    fingerprint: str
     tenancy_ocid: str
-    region: str
+    region: List[str]
     is_active: bool
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Region ────────────────────────────────────────────────────────────────────
+class RegionOut(BaseModel):
+    id: int
+    identifier: str
+    name: str
+    key: str
 
     class Config:
         from_attributes = True
@@ -98,6 +111,7 @@ class SnipeTaskOut(BaseModel):
 # ── Instance control ──────────────────────────────────────────────────────────
 class InstanceAction(BaseModel):
     action: str   # START / STOP / RESET / SOFTSTOP
+    region: Optional[str] = None   # 实例所在区域
 
 
 class InstanceOut(BaseModel):

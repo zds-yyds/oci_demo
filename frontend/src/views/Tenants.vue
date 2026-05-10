@@ -11,7 +11,11 @@
       <el-table :data="tenants" v-loading="loading">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="账户名称" />
-        <el-table-column prop="region" label="区域" width="140" />
+        <el-table-column prop="region" label="区域" width="200">
+          <template #default="{ row }">
+            <el-tag v-for="r in row.region" :key="r" size="small" style="margin:2px">{{ r }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="tenancy_ocid" label="Tenancy OCID" show-overflow-tooltip />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
@@ -23,7 +27,7 @@
         <el-table-column prop="created_at" label="创建时间" width="170">
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button text size="small" @click="$router.push(`/instances/${row.id}`)">
               <el-icon><Monitor /></el-icon> 实例
@@ -35,7 +39,7 @@
               <el-icon><Edit /></el-icon> 编辑
             </el-button>
             <el-button text size="small" type="danger" @click="deleteTenant(row)">
-              <el-icon><Delete /></el-icon>
+              <el-icon><Delete /></el-icon> 删除
             </el-button>
           </template>
         </el-table-column>
@@ -58,16 +62,16 @@
           <el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." />
         </el-form-item>
         <el-form-item label="Region" prop="region">
-          <el-select v-model="form.region" placeholder="选择区域" style="width:100%">
+          <el-select v-model="form.region" placeholder="选择区域（可多选）" filterable multiple collapse-tags collapse-tags-tooltip style="width:100%">
             <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
           </el-select>
         </el-form-item>
-        <el-form-item label="私钥 (PEM)" prop="private_key">
+        <el-form-item label="私钥 (PEM)" prop="private_key" :rules="editId ? [] : [{ required: true, message: '请输入私钥' }]">
           <el-input
             v-model="form.private_key"
             type="textarea"
             :rows="6"
-            placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
+            :placeholder="editId ? '留空表示不修改' : '-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----'"
           />
         </el-form-item>
       </el-form>
@@ -92,14 +96,10 @@ const saving = ref(false)
 const editId = ref(null)
 const formRef = ref()
 
-const regions = [
-  'ap-singapore-1', 'ap-tokyo-1', 'ap-osaka-1', 'ap-seoul-1',
-  'ap-sydney-1', 'ap-mumbai-1', 'us-ashburn-1', 'us-phoenix-1',
-  'eu-frankfurt-1', 'eu-amsterdam-1', 'uk-london-1', 'ca-toronto-1',
-]
+const regions = ref([])
 
 const form = reactive({
-  name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: '', private_key: '',
+  name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: [], private_key: '',
 })
 
 const rules = {
@@ -107,8 +107,7 @@ const rules = {
   user_ocid: [{ required: true, message: '请输入 User OCID' }],
   fingerprint: [{ required: true, message: '请输入 Fingerprint' }],
   tenancy_ocid: [{ required: true, message: '请输入 Tenancy OCID' }],
-  region: [{ required: true, message: '请选择区域' }],
-  private_key: [{ required: true, message: '请输入私钥' }],
+  region: [{ required: true, type: 'array', min: 1, message: '请至少选择一个区域' }],
 }
 
 function formatDate(d) { return dayjs(d).format('YYYY-MM-DD HH:mm') }
@@ -125,7 +124,7 @@ async function load() {
 
 function openAdd() {
   editId.value = null
-  Object.assign(form, { name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: '', private_key: '' })
+  Object.assign(form, { name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: [], private_key: '' })
   dialogVisible.value = true
   // 自动预填默认私钥
   api.get('/users/me/default-key/value').then(res => {
@@ -137,7 +136,14 @@ function openAdd() {
 
 function openEdit(row) {
   editId.value = row.id
-  Object.assign(form, { name: row.name, user_ocid: row.user_ocid || '', fingerprint: row.fingerprint || '', tenancy_ocid: row.tenancy_ocid, region: row.region, private_key: '' })
+  Object.assign(form, {
+    name: row.name,
+    user_ocid: row.user_ocid || '',
+    fingerprint: row.fingerprint || '',
+    tenancy_ocid: row.tenancy_ocid,
+    region: row.region || [],
+    private_key: '',
+  })
   dialogVisible.value = true
 }
 
@@ -146,7 +152,9 @@ async function save() {
   saving.value = true
   try {
     if (editId.value) {
-      await api.put(`/tenants/${editId.value}`, form)
+      const payload = { ...form }
+      if (!payload.private_key) delete payload.private_key
+      await api.put(`/tenants/${editId.value}`, payload)
       ElMessage.success('更新成功')
     } else {
       await api.post('/tenants', form)
@@ -167,12 +175,16 @@ async function deleteTenant(row) {
 }
 
 async function testConn(row) {
-  const loading = ElMessage({ message: '正在测试连接...', type: 'info', duration: 0 })
+  const loading = ElMessage({ message: '正在测试连接（遍历所有区域）...', type: 'info', duration: 0 })
   try {
     const res = await api.get(`/tenants/${row.id}/test`)
     loading.close()
     if (res.data.status === 'ok') {
-      ElMessage.success(`连接成功！租户名: ${res.data.tenancy_name}`)
+      const regionResults = res.data.regions || {}
+      const details = Object.entries(regionResults)
+        .map(([r, s]) => `${r}: ${s === 'ok' ? '✓' : '✗'}`)
+        .join('\n')
+      ElMessage.success({ message: `连接成功！租户: ${res.data.tenancy_name}\n${details}`, duration: 5000 })
     } else {
       ElMessage.error(`连接失败: ${res.data.detail}`)
     }
@@ -181,7 +193,20 @@ async function testConn(row) {
   }
 }
 
-onMounted(load)
+async function loadRegions() {
+  try {
+    const res = await api.get('/regions')
+    regions.value = res.data.map(r => r.identifier)
+  } catch {
+    // fallback
+    regions.value = []
+  }
+}
+
+onMounted(() => {
+  load()
+  loadRegions()
+})
 </script>
 
 <style scoped>

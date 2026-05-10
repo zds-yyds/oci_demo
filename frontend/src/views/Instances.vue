@@ -23,7 +23,7 @@
             </div>
             <div class="inst-info">
               <div><el-icon><Cpu /></el-icon> {{ inst.shape }}</div>
-              <div><el-icon><Location /></el-icon> {{ inst.availability_domain }}</div>
+              <div><el-icon><Location /></el-icon> {{ inst.region }} / {{ inst.availability_domain }}</div>
               <div v-if="inst.public_ip"><el-icon><Connection /></el-icon> {{ inst.public_ip }}</div>
               <div v-if="inst.time_created">
                 <el-icon><Calendar /></el-icon> {{ formatDate(inst.time_created) }}
@@ -97,7 +97,7 @@ async function doAction(inst, action) {
     '确认操作', { type: 'warning' }
   )
   try {
-    await api.post(`/instances/${tenantId}/${inst.id}/action`, { action })
+    await api.post(`/instances/${tenantId}/${inst.id}/action`, { action, region: inst.region })
     ElMessage.success(`${actionMap[action]}指令已发送`)
     setTimeout(load, 3000)
   } catch {}

@@ -17,9 +17,12 @@ api.interceptors.response.use(
   (err) => {
     const msg = err.response?.data?.detail || err.message || '请求失败'
     if (err.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      window.location.href = '/login'
+      // 如果当前不在登录页，清除凭据并跳转
+      if (!window.location.pathname.startsWith('/login')) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+      }
     } else {
       ElMessage.error(msg)
     }

@@ -60,7 +60,7 @@ def _run_snipe(task_id: int, tenant_data: dict, task_data: dict, db_url: str):
         "user": tenant_data["user_ocid"],
         "fingerprint": tenant_data["fingerprint"],
         "tenancy": tenant_data["tenancy_ocid"],
-        "region": tenant_data["region"],
+        "region": tenant_data["region"].split(",")[0].strip(),
         "key_file": tmp.name,
     }
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from typing import List
 from app.database import get_db
 from app import models, schemas
@@ -16,7 +17,9 @@ async def get_current_bill(
     current_user: models.User = Depends(get_current_user),
 ):
     """实时拉取当月账单"""
-    tenant = await db.get(models.Tenant, tenant_id)
+    stmt = select(models.Tenant).options(selectinload(models.Tenant.regions)).where(models.Tenant.id == tenant_id)
+    result = await db.execute(stmt)
+    tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="租户不存在")
     if not current_user.is_admin and tenant.owner_id != current_user.id:
@@ -34,7 +37,7 @@ async def get_current_bill(
             "user": tenant.user_ocid,
             "fingerprint": tenant.fingerprint,
             "tenancy": tenant.tenancy_ocid,
-            "region": tenant.region,
+            "region": tenant.region_list[0] if tenant.region_list else "us-ashburn-1",
             "key_file": tmp.name,
         }
         usage_client = oci.usage_api.UsageapiClient(config)
