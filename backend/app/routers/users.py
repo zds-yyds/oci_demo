@@ -15,6 +15,7 @@ def _user_to_out(user: models.User) -> schemas.UserOut:
         username=user.username,
         is_admin=user.is_admin,
         has_default_key=bool(user.default_private_key),
+        has_default_ssh_key=bool(user.default_ssh_public_key),
         created_at=user.created_at,
     )
 
@@ -131,3 +132,40 @@ async def get_default_key_value(
     if not current_user.default_private_key:
         return {"private_key": ""}
     return {"private_key": current_user.default_private_key}
+
+
+# ── 默认 SSH 公钥 ─────────────────────────────────────────────────────────────
+
+@router.get("/me/default-ssh-key", response_model=schemas.DefaultSSHKeyOut)
+async def get_default_ssh_key(
+    current_user: models.User = Depends(get_current_user),
+):
+    """查看当前用户是否设置了默认 SSH 公钥"""
+    has_key = bool(current_user.default_ssh_public_key)
+    preview = None
+    if has_key:
+        key_content = current_user.default_ssh_public_key.strip()
+        preview = key_content[:40] + "..." if len(key_content) > 40 else key_content
+    return schemas.DefaultSSHKeyOut(has_key=has_key, preview=preview)
+
+
+@router.put("/me/default-ssh-key")
+async def set_default_ssh_key(
+    data: schemas.DefaultSSHKeyUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """设置或清除当前用户的默认 SSH 公钥"""
+    current_user.default_ssh_public_key = data.ssh_public_key.strip() or None
+    await db.commit()
+    return {"message": "保存成功", "has_key": bool(current_user.default_ssh_public_key)}
+
+
+@router.get("/me/default-ssh-key/value")
+async def get_default_ssh_key_value(
+    current_user: models.User = Depends(get_current_user),
+):
+    """获取默认 SSH 公钥完整内容（用于新建抢机任务时预填）"""
+    if not current_user.default_ssh_public_key:
+        return {"ssh_public_key": ""}
+    return {"ssh_public_key": current_user.default_ssh_public_key}

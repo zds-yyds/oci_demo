@@ -26,6 +26,7 @@ class UserOut(BaseModel):
     username: str
     is_admin: bool
     has_default_key: bool = False   # 是否已设置默认私钥（不返回明文）
+    has_default_ssh_key: bool = False   # 是否已设置默认 SSH 公钥
     created_at: datetime
 
     class Config:
@@ -39,7 +40,7 @@ class TenantCreate(BaseModel):
     fingerprint: str
     tenancy_ocid: str
     region: List[str]   # 多个区域 identifier
-    private_key: str   # PEM content
+    private_key: Optional[str] = None   # PEM content，留空则使用用户默认私钥
 
 
 class TenantUpdate(BaseModel):
@@ -175,3 +176,13 @@ class DefaultKeyOut(BaseModel):
     has_key: bool
     # 只返回前20个字符用于确认，不返回完整私钥
     preview: Optional[str] = None
+
+
+# ── Default SSH public key ────────────────────────────────────────────────────
+class DefaultSSHKeyUpdate(BaseModel):
+    ssh_public_key: str   # ssh-rsa AAAA... 内容，传空字符串表示清除
+
+
+class DefaultSSHKeyOut(BaseModel):
+    has_key: bool
+    preview: Optional[str] = None   # 只返回前 40 个字符用于确认

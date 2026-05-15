@@ -48,7 +48,12 @@ async def create_task(
     current_user: models.User = Depends(get_current_user),
 ):
     tenant = await _get_tenant(data.tenant_id, db, current_user)
-    task = models.SnipeTask(**data.model_dump())
+    task_data = data.model_dump()
+    # 如果未提供 SSH 公钥，使用用户的默认公钥
+    if not task_data.get("ssh_public_key"):
+        if current_user.default_ssh_public_key:
+            task_data["ssh_public_key"] = current_user.default_ssh_public_key
+    task = models.SnipeTask(**task_data)
     db.add(task)
     await db.commit()
     await db.refresh(task)

@@ -62,6 +62,16 @@ async def lifespan(app: FastAPI):
     # 2. 建表
     await init_db()
 
+    # 2.1 自动迁移：确保新字段存在（create_all 不会修改已有表）
+    async with AsyncSessionLocal() as db:
+        try:
+            await db.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS default_ssh_public_key TEXT"
+            ))
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
     # 3. 创建默认管理员
     async with AsyncSessionLocal() as db:
         result = await db.execute(

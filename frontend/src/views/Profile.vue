@@ -6,7 +6,7 @@
 
     <el-row :gutter="16">
       <!-- 默认私钥 -->
-      <el-col :span="14">
+      <el-col :span="12">
         <el-card shadow="never">
           <template #header>
             <div style="display:flex;align-items:center;gap:8px">
@@ -71,8 +71,85 @@
         </el-card>
       </el-col>
 
-      <!-- 修改密码 -->
-      <el-col :span="10">
+      <!-- 默认 SSH 公钥 -->
+      <el-col :span="12">
+        <el-card shadow="never">
+          <template #header>
+            <div style="display:flex;align-items:center;gap:8px">
+              <el-icon color="#67c23a"><Connection /></el-icon>
+              <span>默认 SSH 公钥</span>
+              <el-tag v-if="hasSSHKey" type="success" size="small">已设置</el-tag>
+              <el-tag v-else type="info" size="small">未设置</el-tag>
+            </div>
+          </template>
+
+          <el-alert type="info" :closable="false" style="margin-bottom:16px">
+            设置后，新建抢机任务时 SSH 公钥会自动使用此默认值，无需每次粘贴。
+          </el-alert>
+
+          <div v-if="hasSSHKey && !sshEditing" class="key-preview">
+            <el-icon><Key /></el-icon>
+            <span>{{ sshPreview }}</span>
+          </div>
+
+          <el-form v-if="sshEditing || !hasSSHKey" style="margin-top:8px">
+            <el-form-item>
+              <el-input
+                v-model="sshPublicKey"
+                type="textarea"
+                :rows="5"
+                placeholder="ssh-rsa AAAAB3NzaC1yc2EAAAA..."
+                style="font-family:monospace;font-size:12px"
+              />
+            </el-form-item>
+            <el-upload
+              :show-file-list="false"
+              :before-upload="handleSSHFileUpload"
+              accept=".pub,.txt,*"
+              style="margin-top:8px"
+            >
+              <el-button size="small">
+                <el-icon><Upload /></el-icon> 上传公钥文件
+              </el-button>
+            </el-upload>
+          </el-form>
+
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <el-button
+              v-if="!sshEditing && hasSSHKey"
+              type="primary"
+              @click="sshEditing = true"
+            >
+              <el-icon><Edit /></el-icon> 修改公钥
+            </el-button>
+            <el-button
+              v-if="sshEditing || !hasSSHKey"
+              type="primary"
+              :loading="sshSaving"
+              @click="saveSSHKey"
+            >
+              <el-icon><Check /></el-icon> 保存
+            </el-button>
+            <el-button
+              v-if="sshEditing"
+              @click="cancelSSHEdit"
+            >取消</el-button>
+            <el-button
+              v-if="hasSSHKey"
+              type="danger"
+              plain
+              @click="clearSSHKey"
+            >
+              <el-icon><Delete /></el-icon> 清除公钥
+            </el-button>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 修改密码 -->
+    <el-row :gutter="16" style="margin-top:16px">
+      <el-col :span="12">
         <el-card shadow="never">
           <template #header>
             <div style="display:flex;align-items:center;gap:8px">
@@ -107,12 +184,21 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 
+// ── 默认私钥 ──────────────────────────────────────────────────────────────────
 const hasKey = ref(false)
 const preview = ref('')
 const privateKey = ref('')
 const editing = ref(false)
 const saving = ref(false)
 
+// ── 默认 SSH 公钥 ─────────────────────────────────────────────────────────────
+const hasSSHKey = ref(false)
+const sshPreview = ref('')
+const sshPublicKey = ref('')
+const sshEditing = ref(false)
+const sshSaving = ref(false)
+
+// ── 修改密码 ──────────────────────────────────────────────────────────────────
 const pwdFormRef = ref()
 const pwdSaving = ref(false)
 const pwdForm = reactive({ old_password: '', new_password: '', confirm_password: '' })
@@ -130,6 +216,7 @@ const pwdRules = {
   ],
 }
 
+// ── 私钥相关方法 ──────────────────────────────────────────────────────────────
 async function loadKeyStatus() {
   const res = await api.get('/users/me/default-key')
   hasKey.value = res.data.has_key
@@ -167,6 +254,63 @@ function cancelEdit() {
   privateKey.value = ''
 }
 
+// ── SSH 公钥相关方法 ──────────────────────────────────────────────────────────
+async function loadSSHKeyStatus() {
+  const res = await api.get('/users/me/default-ssh-key')
+  hasSSHKey.value = res.data.has_key
+  sshPreview.value = res.data.preview || ''
+}
+
+async function saveSSHKey() {
+  if (!sshPublicKey.value.trim()) {
+    ElMessage.warning('请输入 SSH 公钥内容')
+    return
+  }
+  sshSaving.value = true
+  try {
+    await api.put('/users/me/default-ssh-key', { ssh_public_key: sshPublicKey.value })
+    ElMessage.success('默认 SSH 公钥已保存')
+    sshEditing.value = false
+    sshPublicKey.value = ''
+    await loadSSHKeyStatus()
+  } finally {
+    sshSaving.value = false
+  }
+}
+
+async function clearSSHKey() {
+  await ElMessageBox.confirm('确认清除默认 SSH 公钥？', '警告', { type: 'warning' })
+  await api.put('/users/me/default-ssh-key', { ssh_public_key: '' })
+  ElMessage.success('已清除')
+  hasSSHKey.value = false
+  sshPreview.value = ''
+  sshPublicKey.value = ''
+}
+
+function cancelSSHEdit() {
+  sshEditing.value = false
+  sshPublicKey.value = ''
+}
+
+function handleSSHFileUpload(file) {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const content = e.target.result.trim()
+    if (content) {
+      sshPublicKey.value = content
+      ElMessage.success('已读取公钥文件内容，请确认后保存')
+    } else {
+      ElMessage.error('文件内容为空')
+    }
+  }
+  reader.onerror = () => {
+    ElMessage.error('文件读取失败')
+  }
+  reader.readAsText(file)
+  return false
+}
+
+// ── 修改密码 ──────────────────────────────────────────────────────────────────
 async function changePassword() {
   await pwdFormRef.value.validate()
   pwdSaving.value = true
@@ -182,7 +326,10 @@ async function changePassword() {
   }
 }
 
-onMounted(loadKeyStatus)
+onMounted(() => {
+  loadKeyStatus()
+  loadSSHKeyStatus()
+})
 </script>
 
 <style scoped>
@@ -198,5 +345,6 @@ onMounted(loadKeyStatus)
   font-family: monospace;
   font-size: 13px;
   color: #303133;
+  word-break: break-all;
 }
 </style>

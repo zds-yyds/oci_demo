@@ -77,7 +77,7 @@
           <el-input-number v-model="form.frequency" :min="1" :max="60" />
         </el-form-item>
         <el-form-item label="SSH 公钥">
-          <el-input v-model="form.ssh_public_key" type="textarea" :rows="3" placeholder="ssh-rsa AAAA..." />
+          <el-input v-model="form.ssh_public_key" type="textarea" :rows="3" placeholder="留空表示使用个人设置中的默认 SSH 公钥" />
         </el-form-item>
       </el-form>
       <template #footer>

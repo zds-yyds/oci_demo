@@ -53,7 +53,43 @@
 
     <!-- Add/Edit Dialog -->
     <el-dialog v-model="dialogVisible" :title="editId ? '编辑账户' : '添加云账户'" width="600px">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+      <!-- 导入区域：仅在添加模式下显示 -->
+      <div v-if="!editId" class="import-section">
+        <el-divider content-position="left">快速导入 OCI Config</el-divider>
+        <div class="import-actions">
+          <el-button size="small" @click="showPasteArea = !showPasteArea">
+            <el-icon><DocumentCopy /></el-icon> 粘贴配置
+          </el-button>
+          <el-upload
+            :show-file-list="false"
+            :before-upload="handleFileUpload"
+            accept=".conf,.config,.pem,.txt,*"
+          >
+            <el-button size="small">
+              <el-icon><Upload /></el-icon> 上传配置文件
+            </el-button>
+          </el-upload>
+        </div>
+        <div v-if="showPasteArea" class="paste-area">
+          <el-input
+            v-model="pasteContent"
+            type="textarea"
+            :rows="6"
+            placeholder="粘贴 OCI config 内容，例如：
+[DEFAULT]
+user=ocid1.user.oc1..xxx
+fingerprint=xx:xx:xx:...
+tenancy=ocid1.tenancy.oc1..xxx
+region=ap-singapore-1
+key_file=xxx.pem"
+          />
+          <el-button type="primary" size="small" style="margin-top:8px" @click="parseAndFill">
+            识别并填入表单
+          </el-button>
+        </div>
+      </div>
+
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="120px" style="margin-top:16px">
         <el-form-item label="账户名称" prop="name">
           <el-input v-model="form.name" placeholder="自定义名称，如：我的OCI账户" />
         </el-form-item>
@@ -71,12 +107,12 @@
             <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
           </el-select>
         </el-form-item>
-        <el-form-item label="私钥 (PEM)" prop="private_key" :rules="editId ? [] : [{ required: true, message: '请输入私钥' }]">
+        <el-form-item label="私钥 (PEM)" prop="private_key">
           <el-input
             v-model="form.private_key"
             type="textarea"
             :rows="6"
-            :placeholder="editId ? '留空表示不修改' : '-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----'"
+            placeholder="留空表示使用个人设置中的默认私钥"
           />
         </el-form-item>
       </el-form>
@@ -102,6 +138,8 @@ const editId = ref(null)
 const formRef = ref()
 
 const regions = ref([])
+const showPasteArea = ref(false)
+const pasteContent = ref('')
 
 const form = reactive({
   name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: [], private_key: '',
@@ -117,6 +155,99 @@ const rules = {
 
 function formatDate(d) { return dayjs(d).format('YYYY-MM-DD HH:mm') }
 
+/**
+ * 解析 OCI config 格式的文本内容
+ * 支持格式：
+ * [DEFAULT]
+ * user=ocid1.user.oc1..xxx
+ * fingerprint=xx:xx:xx:...
+ * tenancy=ocid1.tenancy.oc1..xxx
+ * region=ap-singapore-1
+ * key_file=xxx.pem  (忽略)
+ */
+function parseOciConfig(text) {
+  const result = {}
+  const lines = text.split(/\r?\n/)
+  for (const line of lines) {
+    const trimmed = line.trim()
+    // 跳过空行、注释、section header
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('[')) continue
+    const eqIndex = trimmed.indexOf('=')
+    if (eqIndex === -1) continue
+    const key = trimmed.substring(0, eqIndex).trim().toLowerCase()
+    const value = trimmed.substring(eqIndex + 1).trim()
+    if (!value) continue
+    // 忽略 key_file
+    if (key === 'key_file') continue
+    result[key] = value
+  }
+  return result
+}
+
+/**
+ * 将解析结果填入表单
+ */
+function fillFormFromConfig(parsed) {
+  let filled = 0
+  if (parsed.user) {
+    form.user_ocid = parsed.user
+    filled++
+  }
+  if (parsed.fingerprint) {
+    form.fingerprint = parsed.fingerprint
+    filled++
+  }
+  if (parsed.tenancy) {
+    form.tenancy_ocid = parsed.tenancy
+    filled++
+  }
+  if (parsed.region) {
+    // region 可能是单个值，加入到数组中（如果还没有的话）
+    const regionVal = parsed.region
+    if (!form.region.includes(regionVal)) {
+      form.region = [regionVal]
+    }
+    filled++
+  }
+  return filled
+}
+
+function parseAndFill() {
+  if (!pasteContent.value.trim()) {
+    ElMessage.warning('请先粘贴配置内容')
+    return
+  }
+  const parsed = parseOciConfig(pasteContent.value)
+  const filled = fillFormFromConfig(parsed)
+  if (filled === 0) {
+    ElMessage.error('未能识别有效的配置项，请检查格式')
+  } else {
+    ElMessage.success(`已识别并填入 ${filled} 项配置，请检查后保存`)
+    showPasteArea.value = false
+    pasteContent.value = ''
+  }
+}
+
+function handleFileUpload(file) {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const content = e.target.result
+    const parsed = parseOciConfig(content)
+    const filled = fillFormFromConfig(parsed)
+    if (filled === 0) {
+      ElMessage.error('文件中未能识别有效的配置项，请检查文件格式')
+    } else {
+      ElMessage.success(`已从文件识别并填入 ${filled} 项配置，请检查后保存`)
+    }
+  }
+  reader.onerror = () => {
+    ElMessage.error('文件读取失败')
+  }
+  reader.readAsText(file)
+  // 返回 false 阻止 el-upload 默认上传行为
+  return false
+}
+
 async function load() {
   loading.value = true
   try {
@@ -130,13 +261,9 @@ async function load() {
 function openAdd() {
   editId.value = null
   Object.assign(form, { name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: [], private_key: '' })
+  showPasteArea.value = false
+  pasteContent.value = ''
   dialogVisible.value = true
-  // 自动预填默认私钥
-  api.get('/users/me/default-key/value').then(res => {
-    if (res.data.private_key) {
-      form.private_key = res.data.private_key
-    }
-  }).catch(() => {})
 }
 
 function openEdit(row) {
@@ -156,13 +283,13 @@ async function save() {
   await formRef.value.validate()
   saving.value = true
   try {
+    const payload = { ...form }
+    if (!payload.private_key) delete payload.private_key
     if (editId.value) {
-      const payload = { ...form }
-      if (!payload.private_key) delete payload.private_key
       await api.put(`/tenants/${editId.value}`, payload)
       ElMessage.success('更新成功')
     } else {
-      await api.post('/tenants', form)
+      await api.post('/tenants', payload)
       ElMessage.success('添加成功')
     }
     dialogVisible.value = false
@@ -217,4 +344,7 @@ onMounted(() => {
 <style scoped>
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-header h2 { font-size: 22px; }
+.import-section { margin-bottom: 8px; }
+.import-actions { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+.paste-area { margin-top: 8px; }
 </style>

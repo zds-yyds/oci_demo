@@ -44,6 +44,11 @@ async def create_tenant(
     current_user: models.User = Depends(get_current_user),
 ):
     tenant_data = data.model_dump(exclude={"region"})
+    # 如果未提供私钥，使用用户的默认私钥
+    if not tenant_data.get("private_key"):
+        if not current_user.default_private_key:
+            raise HTTPException(status_code=400, detail="未提供私钥，且未设置默认私钥，请先在个人设置中配置默认私钥")
+        tenant_data["private_key"] = current_user.default_private_key
     tenant = models.Tenant(**tenant_data, owner_id=current_user.id)
     # 添加区域关联
     for r in data.region:

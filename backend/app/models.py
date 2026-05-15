@@ -11,6 +11,7 @@ class User(Base):
     hashed_password = Column(String(256), nullable=False)
     is_admin = Column(Boolean, default=False)
     default_private_key = Column(Text, nullable=True)   # 用户默认 OCI 私钥
+    default_ssh_public_key = Column(Text, nullable=True)   # 用户默认 SSH 公钥
     created_at = Column(DateTime, default=datetime.utcnow)
     tenants = relationship("Tenant", back_populates="owner")
 
