@@ -150,7 +150,6 @@ async def websocket_ssh(
     # 4. 打开交互式 shell
     try:
         channel = ssh_client.invoke_shell(term="xterm-256color", width=120, height=40)
-        channel.settimeout(0.1)
     except Exception as e:
         await websocket.send_text(f"\r\n\x1b[31m打开 Shell 失败: {str(e)}\x1b[0m\r\n")
         ssh_client.close()
@@ -160,19 +159,24 @@ async def websocket_ssh(
     # 5. 双向转发
     async def read_from_ssh():
         """从 SSH channel 读取数据发送到 WebSocket"""
+        import socket
         loop = asyncio.get_event_loop()
-        while True:
+        while not channel.closed:
             try:
+                # 使用短超时的阻塞读取，避免长时间占用线程
+                channel.settimeout(0.5)
                 data = await loop.run_in_executor(None, lambda: channel.recv(4096))
                 if not data:
                     break
                 await websocket.send_text(data.decode("utf-8", errors="replace"))
+            except socket.timeout:
+                continue
             except paramiko.ssh_exception.SSHException:
                 break
             except OSError:
                 break
             except Exception:
-                await asyncio.sleep(0.1)
+                continue
 
     async def read_from_ws():
         """从 WebSocket 读取数据发送到 SSH channel"""

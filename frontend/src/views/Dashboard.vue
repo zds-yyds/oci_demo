@@ -28,9 +28,19 @@
         <el-card shadow="never">
           <template #header>
             <span>抢机任务状态</span>
-            <el-button text style="float:right" @click="loadTasks">刷新</el-button>
+            <span style="float:right">
+              <el-button text @click="loadTasks">刷新</el-button>
+              <el-button type="primary" text @click="$router.push('/snipe')">
+                <el-icon><Right /></el-icon> 前往抢机任务
+              </el-button>
+            </span>
           </template>
           <el-table :data="recentTasks" size="small" max-height="320">
+            <el-table-column label="租户" width="100">
+              <template #default="{ row }">
+                {{ tenantName(row.tenant_id) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="shape_name" label="类型" width="80" />
             <el-table-column label="状态" width="100">
               <template #default="{ row }">
@@ -39,20 +49,6 @@
             </el-table-column>
             <el-table-column prop="attempt_count" label="尝试次数" width="90" />
             <el-table-column prop="result_ip" label="IP" />
-            <el-table-column label="操作" width="120">
-              <template #default="{ row }">
-                <el-button
-                  v-if="row.status === 'running'"
-                  type="danger" size="small" text
-                  @click="stopTask(row.id)"
-                >停止</el-button>
-                <el-button
-                  v-if="row.status === 'pending' || row.status === 'stopped'"
-                  type="primary" size="small" text
-                  @click="startTask(row.id)"
-                >启动</el-button>
-              </template>
-            </el-table-column>
           </el-table>
         </el-card>
       </el-col>
@@ -86,7 +82,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
 import api from '@/api'
 
 const auth = useAuthStore()
@@ -106,6 +101,10 @@ function statusType(s) {
   return { running: 'warning', success: 'success', failed: 'danger', stopped: 'info', pending: '' }[s] || ''
 }
 
+function tenantName(id) {
+  return tenants.value.find(t => t.id === id)?.name || id
+}
+
 async function loadTasks() {
   const res = await api.get('/snipe')
   tasks.value = res.data
@@ -114,18 +113,6 @@ async function loadTasks() {
 async function loadTenants() {
   const res = await api.get('/tenants')
   tenants.value = res.data
-}
-
-async function startTask(id) {
-  await api.post(`/snipe/${id}/start`)
-  ElMessage.success('任务已启动')
-  loadTasks()
-}
-
-async function stopTask(id) {
-  await api.post(`/snipe/${id}/stop`)
-  ElMessage.success('停止信号已发送')
-  loadTasks()
 }
 
 onMounted(() => {

@@ -1,3 +1,9 @@
+import sys, os
+# 兼容直接运行 main.py 的场景（如 PyCharm Run）
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -183,9 +189,5 @@ async def health():
 
 
 if __name__ == "__main__":
-    import sys, os
-    # 确保从 backend/ 目录运行，无论 PyCharm 工作目录怎么设
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

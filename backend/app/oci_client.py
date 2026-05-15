@@ -1,17 +1,10 @@
 """OCI 客户端工厂 —— 根据租户配置动态构建 OCI config"""
-import tempfile
-import os
 import oci
 from typing import Optional
 
 
 def build_oci_config(tenant, region: str = None) -> dict:
     """从数据库 Tenant 对象构建 OCI SDK config dict，可指定 region 覆盖"""
-    # 将 PEM 私钥写入临时文件（OCI SDK 需要文件路径）
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pem", mode="w")
-    tmp.write(tenant.private_key)
-    tmp.close()
-
     # 如果未指定 region，使用租户的第一个区域
     if not region:
         regions = tenant.region.split(",")
@@ -22,51 +15,40 @@ def build_oci_config(tenant, region: str = None) -> dict:
         "fingerprint": tenant.fingerprint,
         "tenancy": tenant.tenancy_ocid,
         "region": region,
-        "key_file": tmp.name,
+        "key_content": tenant.private_key,
     }
-    return config, tmp.name
-
-
-def cleanup_key_file(path: str):
-    try:
-        os.unlink(path)
-    except Exception:
-        pass
+    return config
 
 
 def get_compute_client(tenant, region: str = None):
-    config, key_path = build_oci_config(tenant, region)
+    config = build_oci_config(tenant, region)
     client = oci.core.ComputeClient(config)
-    cleanup_key_file(key_path)
     return client, config
 
 
 def get_identity_client(tenant, region: str = None):
-    config, key_path = build_oci_config(tenant, region)
+    config = build_oci_config(tenant, region)
     client = oci.identity.IdentityClient(config)
-    cleanup_key_file(key_path)
     return client, config
 
 
 def get_usage_client(tenant, region: str = None):
-    config, key_path = build_oci_config(tenant, region)
+    config = build_oci_config(tenant, region)
     client = oci.usage_api.UsageapiClient(config)
-    cleanup_key_file(key_path)
     return client, config
 
 
 def get_network_client(tenant, region: str = None):
-    config, key_path = build_oci_config(tenant, region)
+    config = build_oci_config(tenant, region)
     client = oci.core.VirtualNetworkClient(config)
-    cleanup_key_file(key_path)
     return client, config
 
 
 def list_all_compartments(tenant, region: str = None) -> list:
     """递归列出租户下所有 compartment（包括根和子区间）"""
-    identity, _ = get_identity_client(tenant, region)
     compartment_ids = [tenant.tenancy_ocid]
     try:
+        identity, _ = get_identity_client(tenant, region)
         resp = identity.list_compartments(
             compartment_id=tenant.tenancy_ocid,
             compartment_id_in_subtree=True,
@@ -82,12 +64,17 @@ def list_all_compartments(tenant, region: str = None) -> list:
 
 def list_instances(tenant) -> list:
     """列出租户下所有区域、所有区间的实例（含详细配置信息）"""
-    regions = tenant.region_list if hasattr(tenant, 'region_list') else [r.strip() for r in tenant.region.split(",") if r.strip()]
+    # 优先使用 region_list，如果为空则回退到 region 字符串解析
+    regions = []
+    if hasattr(tenant, 'region_list') and tenant.region_list:
+        regions = tenant.region_list
+    elif hasattr(tenant, 'region') and tenant.region:
+        regions = [r.strip() for r in tenant.region.split(",") if r.strip()]
     result = []
     for region in regions:
         try:
             compute, config = get_compute_client(tenant, region)
-            network, _ = get_network_client(tenant, region)
+            network = oci.core.VirtualNetworkClient(config)
             block_storage = oci.core.BlockstorageClient(config)
 
             # 获取所有 compartment（根 + 子区间）
@@ -218,7 +205,11 @@ def get_tenancy_name(tenant) -> str:
 
 def test_all_regions(tenant) -> dict:
     """测试所有区域的连接"""
-    regions = tenant.region_list if hasattr(tenant, 'region_list') else [r.strip() for r in tenant.region.split(",") if r.strip()]
+    regions = []
+    if hasattr(tenant, 'region_list') and tenant.region_list:
+        regions = tenant.region_list
+    elif hasattr(tenant, 'region') and tenant.region:
+        regions = [r.strip() for r in tenant.region.split(",") if r.strip()]
     results = {}
     for region in regions:
         try:
