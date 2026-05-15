@@ -64,9 +64,11 @@ def _run_snipe(task_id: int, tenant_data: dict, task_data: dict, db_url: str):
     }
 
     try:
-        compute = oci.core.ComputeClient(config)
-        identity = oci.identity.IdentityClient(config)
-        network = oci.core.VirtualNetworkClient(config)
+        # 设置请求超时（连接超时10s，读取超时60s），防止 API 调用无限挂起
+        timeout = (10, 60)
+        compute = oci.core.ComputeClient(config, timeout=timeout)
+        identity = oci.identity.IdentityClient(config, timeout=timeout)
+        network = oci.core.VirtualNetworkClient(config, timeout=timeout)
         compartment_id = tenant_data["tenancy_ocid"]
 
         # Get availability domains
@@ -270,3 +272,73 @@ def start_snipe_task(task_id: int, tenant_data: dict, task_data: dict, db_url: s
     _running_tasks[task_id] = t
     t.start()
     return True
+
+
+def resume_running_tasks():
+    """
+    服务启动时调用：恢复所有 status=running 的任务。
+    Docker 重启后线程已丢失，需要重新启动。
+    自动恢复的任务不发送通知。
+    """
+    try:
+        from sqlalchemy import create_engine, select
+        from sqlalchemy.orm import Session, selectinload
+        from app.models import SnipeTask, Tenant
+        from app.config import settings
+
+        sync_url = settings.get_sync_url()
+        engine = create_engine(sync_url)
+        with Session(engine) as session:
+            tasks = session.execute(
+                select(SnipeTask).where(SnipeTask.status == "running")
+            ).scalars().all()
+
+            if not tasks:
+                logger.info("无需恢复的抢机任务")
+                engine.dispose()
+                return
+
+            logger.info(f"发现 {len(tasks)} 个需要恢复的抢机任务")
+
+            for task in tasks:
+                tenant = session.execute(
+                    select(Tenant).options(selectinload(Tenant.regions)).where(Tenant.id == task.tenant_id)
+                ).scalar_one_or_none()
+
+                if not tenant:
+                    logger.warning(f"任务 {task.id} 对应的租户不存在，标记为 failed")
+                    task.status = "failed"
+                    task.log = (task.log or "") + "\n[自动恢复] 租户已被删除，任务终止"
+                    continue
+
+                tenant_data = {
+                    "id": tenant.id,
+                    "name": tenant.name,
+                    "user_ocid": tenant.user_ocid,
+                    "fingerprint": tenant.fingerprint,
+                    "tenancy_ocid": tenant.tenancy_ocid,
+                    "region": tenant.region,
+                    "private_key": tenant.private_key,
+                    "owner_id": tenant.owner_id,
+                }
+                task_data = {
+                    "shape_name": task.shape_name,
+                    "instance_ocpus": task.instance_ocpus,
+                    "instance_memory_in_gbs": task.instance_memory_in_gbs,
+                    "boot_volume_size_in_gbs": task.boot_volume_size_in_gbs,
+                    "frequency": task.frequency,
+                    "ssh_public_key": task.ssh_public_key,
+                }
+
+                # 追加恢复日志
+                task.log = (task.log or "") + "\n[自动恢复] 服务重启，任务自动继续..."
+                session.commit()
+
+                # 启动线程
+                start_snipe_task(task.id, tenant_data, task_data, settings.database_url)
+                logger.info(f"已恢复任务 {task.id} (租户: {tenant.name})")
+
+            session.commit()
+        engine.dispose()
+    except Exception as e:
+        logger.error(f"恢复抢机任务失败: {e}")

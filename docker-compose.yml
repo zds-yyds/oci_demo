@@ -66,8 +66,14 @@ services:
     container_name: oci-manager-npm
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
       - "81:81"    # 首次配置用，配好反代后删掉此行
     volumes:
       - npm_data:/data

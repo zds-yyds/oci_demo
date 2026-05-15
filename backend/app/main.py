@@ -11,7 +11,7 @@ from app.database import init_db, AsyncSessionLocal
 from app import models
 from app.auth import hash_password
 from app.config import settings
-from app.routers import auth, users, tenants, instances, snipe, bills, notify, regions, oci_users
+from app.routers import auth, users, tenants, instances, snipe, bills, notify, regions, oci_users, terminal, ssh_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,10 @@ async def lifespan(app: FastAPI):
             await db.commit()
             logger.info(f"已初始化 {len(_init_regions)} 个 OCI 区域")
 
+    # 5. 恢复因重启而中断的抢机任务（不发通知）
+    from app.snipe_worker import resume_running_tasks
+    resume_running_tasks()
+
     yield
 
 
@@ -169,6 +173,8 @@ app.include_router(bills.router)
 app.include_router(notify.router)
 app.include_router(regions.router)
 app.include_router(oci_users.router)
+app.include_router(terminal.router)
+app.include_router(ssh_credentials.router)
 
 
 @app.get("/api/health")

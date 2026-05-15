@@ -31,7 +31,6 @@
             <el-button text style="float:right" @click="loadTasks">刷新</el-button>
           </template>
           <el-table :data="recentTasks" size="small" max-height="320">
-            <el-table-column prop="id" label="ID" width="60" />
             <el-table-column prop="shape_name" label="类型" width="80" />
             <el-table-column label="状态" width="100">
               <template #default="{ row }">

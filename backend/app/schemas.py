@@ -186,3 +186,55 @@ class DefaultSSHKeyUpdate(BaseModel):
 class DefaultSSHKeyOut(BaseModel):
     has_key: bool
     preview: Optional[str] = None   # 只返回前 40 个字符用于确认
+
+
+# ── SSH Credential ────────────────────────────────────────────────────────────
+class SSHCredentialCreate(BaseModel):
+    label: str
+    host: str
+    port: int = 22
+    username: str = "root"
+    auth_type: str = "password"   # password / key
+    password: Optional[str] = None
+    private_key: Optional[str] = None
+
+
+class SSHCredentialUpdate(BaseModel):
+    label: Optional[str] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    username: Optional[str] = None
+    auth_type: Optional[str] = None
+    password: Optional[str] = None
+    private_key: Optional[str] = None
+
+
+class SSHCredentialOut(BaseModel):
+    id: int
+    label: str
+    host: str
+    port: int
+    username: str
+    auth_type: str
+    has_password: bool = False
+    has_key: bool = False
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Tenant Export/Import ──────────────────────────────────────────────────────
+class TenantExportRequest(BaseModel):
+    password: str   # 用户自选的加密密码
+
+
+class TenantImportRequest(BaseModel):
+    password: str   # 解密密码
+    file_content: str   # base64 编码的 .enc 文件内容
+
+
+class TenantImportResult(BaseModel):
+    created: int = 0
+    skipped: int = 0
+    skipped_names: List[str] = []

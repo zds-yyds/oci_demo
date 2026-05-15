@@ -9,7 +9,6 @@
 
     <el-card shadow="never" v-loading="loading">
       <el-table :data="tasks">
-        <el-table-column prop="id" label="ID" width="60" />
         <el-table-column label="租户" width="120">
           <template #default="{ row }">
             {{ tenantName(row.tenant_id) }}

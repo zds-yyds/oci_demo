@@ -53,3 +53,23 @@ async def do_instance_action(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"操作失败: {str(e)}")
+
+
+@router.delete("/{tenant_id}/{instance_id}")
+async def terminate_instance(
+    tenant_id: int,
+    instance_id: str,
+    region: str = None,
+    preserve_boot_volume: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """终止（删除）实例"""
+    tenant = await _get_tenant(tenant_id, db, current_user)
+    try:
+        result = oci_client.terminate_instance(
+            tenant, instance_id, region=region, preserve_boot_volume=preserve_boot_volume
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除实例失败: {str(e)}")

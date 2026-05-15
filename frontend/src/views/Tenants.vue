@@ -2,14 +2,32 @@
   <div>
     <div class="page-header">
       <h2>云账户管理</h2>
-      <el-button type="primary" @click="openAdd">
-        <el-icon><Plus /></el-icon> 添加账户
-      </el-button>
+      <div class="header-actions">
+        <el-button type="primary" @click="openAdd">
+          <el-icon><Plus /></el-icon> 添加账户
+        </el-button>
+        <el-button type="success" @click="openExport">
+          <el-icon><Download /></el-icon> 导出
+        </el-button>
+        <el-button type="warning" @click="openImport">
+          <el-icon><Upload /></el-icon> 导入
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 搜索栏 -->
+    <div class="search-bar">
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索账户名称、Tenancy OCID..."
+        clearable
+        prefix-icon="Search"
+        style="width: 360px"
+      />
     </div>
 
     <el-card shadow="never">
-      <el-table :data="tenants" v-loading="loading">
-        <el-table-column prop="id" label="ID" width="60" />
+      <el-table :data="filteredTenants" v-loading="loading">
         <el-table-column prop="name" label="账户名称" />
         <el-table-column prop="region" label="区域" width="200">
           <template #default="{ row }">
@@ -121,11 +139,68 @@ key_file=xxx.pem"
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- Export Dialog -->
+    <el-dialog v-model="exportDialogVisible" title="加密导出" width="440px">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      >
+        <template #title>导出文件包含私钥等敏感信息，将使用 AES-256-GCM 加密保护。请牢记密码，丢失后无法恢复。</template>
+      </el-alert>
+      <el-form :model="exportForm" :rules="exportRules" ref="exportFormRef" label-width="100px">
+        <el-form-item label="加密密码" prop="password">
+          <el-input v-model="exportForm.password" type="password" show-password placeholder="至少 6 个字符" />
+        </el-form-item>
+        <el-form-item label="确认密码" prop="confirmPassword">
+          <el-input v-model="exportForm.confirmPassword" type="password" show-password placeholder="再次输入密码" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="exportDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="exporting" @click="doExport">确认导出</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Import Dialog -->
+    <el-dialog v-model="importDialogVisible" title="导入备份" width="440px">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      >
+        <template #title>选择 .enc 备份文件并输入导出时设置的密码。已存在的账户（相同 Tenancy OCID）将被跳过。</template>
+      </el-alert>
+      <el-form :model="importForm" :rules="importRules" ref="importFormRef" label-width="100px">
+        <el-form-item label="备份文件" prop="file">
+          <el-upload
+            :show-file-list="true"
+            :auto-upload="false"
+            :limit="1"
+            accept=".enc"
+            :on-change="handleImportFile"
+            :on-remove="() => importForm.file = null"
+          >
+            <el-button size="small"><el-icon><Upload /></el-icon> 选择文件</el-button>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="解密密码" prop="password">
+          <el-input v-model="importForm.password" type="password" show-password placeholder="输入导出时设置的密码" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importing" @click="doImport">确认导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
@@ -141,6 +216,132 @@ const regions = ref([])
 const showPasteArea = ref(false)
 const pasteContent = ref('')
 
+// ── 搜索 ────────────────────────────────────────────────────────────────────
+const searchQuery = ref('')
+
+const filteredTenants = computed(() => {
+  if (!searchQuery.value.trim()) return tenants.value
+  const q = searchQuery.value.toLowerCase()
+  return tenants.value.filter(t =>
+    t.name.toLowerCase().includes(q) ||
+    t.tenancy_ocid.toLowerCase().includes(q) ||
+    (t.user_ocid && t.user_ocid.toLowerCase().includes(q)) ||
+    (t.fingerprint && t.fingerprint.toLowerCase().includes(q))
+  )
+})
+
+// ── 导出 ────────────────────────────────────────────────────────────────────
+const exportDialogVisible = ref(false)
+const exporting = ref(false)
+const exportFormRef = ref()
+const exportForm = reactive({ password: '', confirmPassword: '' })
+
+const exportRules = {
+  password: [
+    { required: true, message: '请输入加密密码' },
+    { min: 6, message: '密码至少 6 个字符' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认密码' },
+    {
+      validator: (rule, value, callback) => {
+        if (value !== exportForm.password) callback(new Error('两次密码不一致'))
+        else callback()
+      },
+    },
+  ],
+}
+
+function openExport() {
+  exportForm.password = ''
+  exportForm.confirmPassword = ''
+  exportDialogVisible.value = true
+}
+
+async function doExport() {
+  await exportFormRef.value.validate()
+  exporting.value = true
+  try {
+    const res = await api.post('/tenants/export', { password: exportForm.password }, { responseType: 'blob' })
+    // 下载文件
+    const blob = new Blob([res.data], { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'oci_tenants_backup.enc'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功，请妥善保管备份文件和密码')
+    exportDialogVisible.value = false
+  } finally {
+    exporting.value = false
+  }
+}
+
+// ── 导入 ────────────────────────────────────────────────────────────────────
+const importDialogVisible = ref(false)
+const importing = ref(false)
+const importFormRef = ref()
+const importForm = reactive({ password: '', file: null })
+
+const importRules = {
+  password: [{ required: true, message: '请输入解密密码' }],
+  file: [{ required: true, message: '请选择备份文件' }],
+}
+
+function openImport() {
+  importForm.password = ''
+  importForm.file = null
+  importDialogVisible.value = true
+}
+
+function handleImportFile(uploadFile) {
+  importForm.file = uploadFile.raw
+}
+
+async function doImport() {
+  await importFormRef.value.validate()
+  if (!importForm.file) {
+    ElMessage.warning('请选择备份文件')
+    return
+  }
+  importing.value = true
+  try {
+    // 读取文件内容并 base64 编码
+    const fileContent = await readFileAsBase64(importForm.file)
+    const res = await api.post('/tenants/import', {
+      password: importForm.password,
+      file_content: fileContent,
+    })
+    const { created, skipped, skipped_names } = res.data
+    let msg = `导入完成：成功 ${created} 个`
+    if (skipped > 0) {
+      msg += `，跳过 ${skipped} 个（${skipped_names.join('、')}）`
+    }
+    ElMessage.success(msg)
+    importDialogVisible.value = false
+    load()
+  } finally {
+    importing.value = false
+  }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      // result 是 data:xxx;base64,XXXX 格式，取逗号后面的部分
+      const base64 = reader.result.split(',')[1]
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+// ── 表单 ────────────────────────────────────────────────────────────────────
 const form = reactive({
   name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: [], private_key: '',
 })
@@ -157,56 +358,32 @@ function formatDate(d) { return dayjs(d).format('YYYY-MM-DD HH:mm') }
 
 /**
  * 解析 OCI config 格式的文本内容
- * 支持格式：
- * [DEFAULT]
- * user=ocid1.user.oc1..xxx
- * fingerprint=xx:xx:xx:...
- * tenancy=ocid1.tenancy.oc1..xxx
- * region=ap-singapore-1
- * key_file=xxx.pem  (忽略)
  */
 function parseOciConfig(text) {
   const result = {}
   const lines = text.split(/\r?\n/)
   for (const line of lines) {
     const trimmed = line.trim()
-    // 跳过空行、注释、section header
     if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('[')) continue
     const eqIndex = trimmed.indexOf('=')
     if (eqIndex === -1) continue
     const key = trimmed.substring(0, eqIndex).trim().toLowerCase()
     const value = trimmed.substring(eqIndex + 1).trim()
     if (!value) continue
-    // 忽略 key_file
     if (key === 'key_file') continue
     result[key] = value
   }
   return result
 }
 
-/**
- * 将解析结果填入表单
- */
 function fillFormFromConfig(parsed) {
   let filled = 0
-  if (parsed.user) {
-    form.user_ocid = parsed.user
-    filled++
-  }
-  if (parsed.fingerprint) {
-    form.fingerprint = parsed.fingerprint
-    filled++
-  }
-  if (parsed.tenancy) {
-    form.tenancy_ocid = parsed.tenancy
-    filled++
-  }
+  if (parsed.user) { form.user_ocid = parsed.user; filled++ }
+  if (parsed.fingerprint) { form.fingerprint = parsed.fingerprint; filled++ }
+  if (parsed.tenancy) { form.tenancy_ocid = parsed.tenancy; filled++ }
   if (parsed.region) {
-    // region 可能是单个值，加入到数组中（如果还没有的话）
     const regionVal = parsed.region
-    if (!form.region.includes(regionVal)) {
-      form.region = [regionVal]
-    }
+    if (!form.region.includes(regionVal)) form.region = [regionVal]
     filled++
   }
   return filled
@@ -240,11 +417,8 @@ function handleFileUpload(file) {
       ElMessage.success(`已从文件识别并填入 ${filled} 项配置，请检查后保存`)
     }
   }
-  reader.onerror = () => {
-    ElMessage.error('文件读取失败')
-  }
+  reader.onerror = () => { ElMessage.error('文件读取失败') }
   reader.readAsText(file)
-  // 返回 false 阻止 el-upload 默认上传行为
   return false
 }
 
@@ -330,7 +504,6 @@ async function loadRegions() {
     const res = await api.get('/regions')
     regions.value = res.data.map(r => r.identifier)
   } catch {
-    // fallback
     regions.value = []
   }
 }
@@ -343,7 +516,9 @@ onMounted(() => {
 
 <style scoped>
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.page-header h2 { font-size: 22px; }
+.page-header h2 { font-size: 22px; margin: 0; }
+.header-actions { display: flex; gap: 8px; }
+.search-bar { margin-bottom: 16px; }
 .import-section { margin-bottom: 8px; }
 .import-actions { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
 .paste-area { margin-top: 8px; }

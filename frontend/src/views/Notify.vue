@@ -32,6 +32,13 @@
             </template>
           </div>
           <div class="notify-actions">
+            <el-switch
+              v-model="cfg.is_active"
+              :active-text="cfg.is_active ? '启用' : ''"
+              :inactive-text="cfg.is_active ? '' : '禁用'"
+              @change="toggleActive(cfg)"
+              style="margin-right: 8px"
+            />
             <el-button size="small" @click="testNotify(cfg)">
               <el-icon><Promotion /></el-icon> 测试
             </el-button>
@@ -188,6 +195,17 @@ async function testNotify(cfg) {
   }
 }
 
+async function toggleActive(cfg) {
+  try {
+    const res = await api.put(`/notify/${cfg.id}/toggle`)
+    cfg.is_active = res.data.is_active
+    ElMessage.success(cfg.is_active ? '已启用' : '已禁用')
+  } catch {
+    // 恢复状态
+    cfg.is_active = !cfg.is_active
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -198,5 +216,5 @@ onMounted(load)
 .notify-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .notify-type { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
 .notify-info { font-size: 13px; color: #606266; margin-bottom: 16px; display: flex; flex-direction: column; gap: 4px; }
-.notify-actions { display: flex; gap: 8px; }
+.notify-actions { display: flex; gap: 8px; align-items: center; }
 </style>

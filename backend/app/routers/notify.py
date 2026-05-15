@@ -88,3 +88,19 @@ async def test_notify(
         raise HTTPException(status_code=400, detail="未知通知类型")
 
     return {"success": ok}
+
+
+@router.put("/{config_id}/toggle")
+async def toggle_config(
+    config_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """切换通知配置的启用/禁用状态"""
+    cfg = await db.get(models.NotifyConfig, config_id)
+    if not cfg or cfg.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="配置不存在")
+    cfg.is_active = not cfg.is_active
+    await db.commit()
+    await db.refresh(cfg)
+    return {"is_active": cfg.is_active}

@@ -97,6 +97,21 @@ class BillRecord(Base):
     tenant = relationship("Tenant", back_populates="bill_records")
 
 
+class SSHCredential(Base):
+    """SSH 连接凭据"""
+    __tablename__ = "ssh_credentials"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    label = Column(String(128), nullable=False)   # 自定义标签，如 "我的VPS"
+    host = Column(String(256), nullable=False)
+    port = Column(Integer, default=22)
+    username = Column(String(64), nullable=False, default="root")
+    auth_type = Column(String(16), nullable=False, default="password")   # password / key
+    password = Column(String(256), nullable=True)
+    private_key = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class NotifyConfig(Base):
     """通知配置（邮件 / 企业微信）"""
     __tablename__ = "notify_configs"

@@ -20,3 +20,5 @@ pytz==2024.1
 requests==2.32.2
 apscheduler==3.10.4
 websockets==12.0
+cryptography==42.0.8
+paramiko==3.4.0

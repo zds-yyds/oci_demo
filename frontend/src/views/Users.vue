@@ -9,7 +9,6 @@
 
     <el-card shadow="never">
       <el-table :data="users" v-loading="loading">
-        <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="username" label="用户名" />
         <el-table-column label="角色" width="100">
           <template #default="{ row }">
