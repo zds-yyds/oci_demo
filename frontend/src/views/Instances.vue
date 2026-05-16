@@ -66,6 +66,12 @@
                 <el-icon><Delete /></el-icon> 删除实例
               </el-button>
               <el-button
+                size="small" plain
+                @click="openConfigDialog(inst)"
+              >
+                <el-icon><Setting /></el-icon> 更改配置
+              </el-button>
+              <el-button
                 v-if="inst.public_ip && inst.lifecycle_state === 'RUNNING'"
                 type="primary" size="small" plain
                 @click="openSSHDialog(inst)"
@@ -129,6 +135,51 @@
       <template #footer>
         <el-button @click="sshDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="doSSHConnect">连接</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 更改实例配置弹窗 -->
+    <el-dialog v-model="configDialogVisible" title="更改实例配置" width="520px">
+      <el-alert
+        v-if="configTarget && configTarget.lifecycle_state === 'RUNNING'"
+        type="warning"
+        :closable="false"
+        style="margin-bottom:16px"
+      >
+        更改 Shape 需要实例处于 STOPPED 状态。修改 OCPU/内存（Flex 类型）可在运行中调整。
+      </el-alert>
+      <el-form :model="configForm" label-width="110px">
+        <el-form-item label="实例名称">
+          <el-input v-model="configForm.display_name" placeholder="留空则不修改" />
+        </el-form-item>
+        <el-form-item label="Shape">
+          <el-select v-model="configForm.shape" placeholder="留空则不修改" clearable style="width:100%">
+            <el-option-group label="ARM (Flex)">
+              <el-option label="VM.Standard.A1.Flex" value="VM.Standard.A1.Flex" />
+              <el-option label="VM.Standard.A2.Flex" value="VM.Standard.A2.Flex" />
+            </el-option-group>
+            <el-option-group label="AMD (Flex)">
+              <el-option label="VM.Standard.E4.Flex" value="VM.Standard.E4.Flex" />
+              <el-option label="VM.Standard.E5.Flex" value="VM.Standard.E5.Flex" />
+              <el-option label="VM.Standard3.Flex" value="VM.Standard3.Flex" />
+            </el-option-group>
+            <el-option-group label="AMD (固定)">
+              <el-option label="VM.Standard.E2.1.Micro" value="VM.Standard.E2.1.Micro" />
+            </el-option-group>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="OCPU 数量">
+          <el-input-number v-model="configForm.ocpus" :min="1" :max="80" :step="1" placeholder="留空则不修改" />
+          <span style="margin-left:8px;color:#909399;font-size:12px">当前: {{ configTarget?.ocpus || '-' }}</span>
+        </el-form-item>
+        <el-form-item label="内存 (GB)">
+          <el-input-number v-model="configForm.memory_in_gbs" :min="1" :max="512" :step="1" placeholder="留空则不修改" />
+          <span style="margin-left:8px;color:#909399;font-size:12px">当前: {{ configTarget?.memory_in_gbs || '-' }}</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="configDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="configLoading" @click="doUpdateConfig">确认修改</el-button>
       </template>
     </el-dialog>
   </div>
@@ -297,6 +348,66 @@ async function doSSHConnect() {
 
   sshDialogVisible.value = false
   router.push({ path: '/terminal' })
+}
+
+// ── 更改实例配置弹窗 ─────────────────────────────────────────────────────────
+const configDialogVisible = ref(false)
+const configTarget = ref(null)
+const configLoading = ref(false)
+const configForm = reactive({
+  display_name: '',
+  shape: '',
+  ocpus: null,
+  memory_in_gbs: null,
+})
+
+function openConfigDialog(inst) {
+  configTarget.value = inst
+  configForm.display_name = inst.display_name || ''
+  configForm.shape = ''
+  configForm.ocpus = inst.ocpus || null
+  configForm.memory_in_gbs = inst.memory_in_gbs || null
+  configDialogVisible.value = true
+}
+
+async function doUpdateConfig() {
+  const payload = { region: configTarget.value.region }
+  let hasChange = false
+
+  if (configForm.display_name && configForm.display_name !== configTarget.value.display_name) {
+    payload.display_name = configForm.display_name
+    hasChange = true
+  }
+  if (configForm.shape) {
+    payload.shape = configForm.shape
+    hasChange = true
+  }
+  if (configForm.ocpus != null && configForm.ocpus !== configTarget.value.ocpus) {
+    payload.ocpus = configForm.ocpus
+    hasChange = true
+  }
+  if (configForm.memory_in_gbs != null && configForm.memory_in_gbs !== configTarget.value.memory_in_gbs) {
+    payload.memory_in_gbs = configForm.memory_in_gbs
+    hasChange = true
+  }
+
+  if (!hasChange) {
+    ElMessage.info('未检测到配置变更')
+    return
+  }
+
+  configLoading.value = true
+  try {
+    await api.put(`/instances/${tenantId}/${configTarget.value.id}/config`, payload)
+    ElMessage.success('实例配置更新成功')
+    configDialogVisible.value = false
+    setTimeout(load, 3000)
+  } catch (e) {
+    const detail = e.response?.data?.detail || '更新失败'
+    ElMessage.error(detail)
+  } finally {
+    configLoading.value = false
+  }
 }
 
 onMounted(load)

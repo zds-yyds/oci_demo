@@ -73,3 +73,28 @@ async def terminate_instance(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除实例失败: {str(e)}")
+
+
+@router.put("/{tenant_id}/{instance_id}/config")
+async def update_instance_config(
+    tenant_id: int,
+    instance_id: str,
+    data: schemas.InstanceConfigUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """更改实例配置（shape / OCPU / 内存 / 名称）"""
+    tenant = await _get_tenant(tenant_id, db, current_user)
+    try:
+        result = oci_client.update_instance_config(
+            tenant,
+            instance_id,
+            region=data.region,
+            display_name=data.display_name,
+            shape=data.shape,
+            ocpus=data.ocpus,
+            memory_in_gbs=data.memory_in_gbs,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更改实例配置失败: {str(e)}")

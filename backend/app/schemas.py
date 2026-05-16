@@ -115,6 +115,15 @@ class InstanceAction(BaseModel):
     region: Optional[str] = None   # 实例所在区域
 
 
+class InstanceConfigUpdate(BaseModel):
+    """更改实例配置（shape / OCPU / 内存 / 名称）"""
+    region: Optional[str] = None
+    display_name: Optional[str] = None
+    shape: Optional[str] = None
+    ocpus: Optional[float] = None
+    memory_in_gbs: Optional[float] = None
+
+
 class InstanceOut(BaseModel):
     id: str
     display_name: str

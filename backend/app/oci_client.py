@@ -165,6 +165,58 @@ def terminate_instance(tenant, instance_id: str, region: str = None, preserve_bo
     return {"message": "实例删除指令已发送", "instance_id": instance_id}
 
 
+def update_instance_config(
+    tenant,
+    instance_id: str,
+    region: str = None,
+    display_name: str = None,
+    shape: str = None,
+    ocpus: float = None,
+    memory_in_gbs: float = None,
+) -> dict:
+    """
+    更改实例配置：名称、shape、OCPU、内存。
+    对于 Flex 类型 shape（如 VM.Standard.A1.Flex / VM.Standard.E4.Flex），
+    可以动态调整 OCPU 和内存大小。
+    注意：更改 shape 需要实例处于 STOPPED 状态。
+    """
+    compute, config = get_compute_client(tenant, region)
+
+    update_details_kwargs = {}
+
+    if display_name:
+        update_details_kwargs["display_name"] = display_name
+
+    if shape:
+        update_details_kwargs["shape"] = shape
+
+    # 构建 shape_config（OCPU / 内存）
+    if ocpus is not None or memory_in_gbs is not None:
+        shape_config_kwargs = {}
+        if ocpus is not None:
+            shape_config_kwargs["ocpus"] = float(ocpus)
+        if memory_in_gbs is not None:
+            shape_config_kwargs["memory_in_gbs"] = float(memory_in_gbs)
+        update_details_kwargs["shape_config"] = oci.core.models.UpdateInstanceShapeConfigDetails(
+            **shape_config_kwargs
+        )
+
+    if not update_details_kwargs:
+        return {"message": "未提供任何修改项", "instance_id": instance_id}
+
+    update_details = oci.core.models.UpdateInstanceDetails(**update_details_kwargs)
+    resp = compute.update_instance(instance_id=instance_id, update_instance_details=update_details)
+    inst = resp.data
+
+    return {
+        "message": "实例配置更新成功",
+        "instance_id": inst.id,
+        "display_name": inst.display_name,
+        "shape": inst.shape,
+        "lifecycle_state": inst.lifecycle_state,
+    }
+
+
 def get_availability_domains(tenant, region: str = None) -> list:
     identity, config = get_identity_client(tenant, region)
     ads = identity.list_availability_domains(compartment_id=tenant.tenancy_ocid).data
