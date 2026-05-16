@@ -22,8 +22,23 @@
         placeholder="搜索账户名称、Tenancy OCID..."
         clearable
         prefix-icon="Search"
-        style="width: 360px"
+        style="width: 320px"
       />
+      <el-select v-model="filterRegion" placeholder="按区域筛选" clearable style="width:180px">
+        <el-option v-for="r in allRegionsInUse" :key="r" :label="r" :value="r" />
+      </el-select>
+      <el-select v-model="filterStatus" placeholder="按状态筛选" clearable style="width:130px">
+        <el-option label="启用" value="active" />
+        <el-option label="禁用" value="inactive" />
+      </el-select>
+      <el-select v-model="sortBy" placeholder="排序" style="width:160px">
+        <el-option label="创建时间 ↓" value="created_desc" />
+        <el-option label="创建时间 ↑" value="created_asc" />
+        <el-option label="名称 A→Z" value="name_asc" />
+        <el-option label="名称 Z→A" value="name_desc" />
+        <el-option label="区域数量 ↓" value="region_desc" />
+        <el-option label="区域数量 ↑" value="region_asc" />
+      </el-select>
     </div>
 
     <el-card shadow="never">
@@ -45,14 +60,11 @@
         <el-table-column prop="created_at" label="创建时间" width="170">
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="340" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
-            <div style="white-space:nowrap">
+            <div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap">
               <el-button text size="small" @click="$router.push(`/instances/${row.id}`)">
                 <el-icon><Monitor /></el-icon> 实例
-              </el-button>
-              <el-button text size="small" @click="$router.push(`/oci-users/${row.id}`)">
-                <el-icon><User /></el-icon> 用户
               </el-button>
               <el-button text size="small" @click="testConn(row)">
                 <el-icon><Connection /></el-icon> 测试
@@ -60,9 +72,22 @@
               <el-button text size="small" @click="openEdit(row)">
                 <el-icon><Edit /></el-icon> 编辑
               </el-button>
-              <el-button text size="small" type="danger" @click="deleteTenant(row)">
-                <el-icon><Delete /></el-icon> 删除
-              </el-button>
+              <el-dropdown trigger="click">
+                <el-button text size="small">
+                  更多 <el-icon><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="router.push(`/security-rules/${row.id}`)"><el-icon><Lock /></el-icon> 安全列表</el-dropdown-item>
+                    <el-dropdown-item @click="router.push(`/traffic/${row.id}`)"><el-icon><TrendCharts /></el-icon> 流量统计</el-dropdown-item>
+                    <el-dropdown-item @click="router.push(`/boot-volumes/${row.id}`)"><el-icon><Box /></el-icon> 引导卷</el-dropdown-item>
+                    <el-dropdown-item @click="router.push(`/vcn/${row.id}`)"><el-icon><Share /></el-icon> VCN 管理</el-dropdown-item>
+                    <el-dropdown-item @click="router.push(`/limits/${row.id}`)"><el-icon><Histogram /></el-icon> 配额查询</el-dropdown-item>
+                    <el-dropdown-item @click="router.push(`/oci-users/${row.id}`)"><el-icon><User /></el-icon> OCI 用户</el-dropdown-item>
+                    <el-dropdown-item divided @click="deleteTenant(row)" style="color:#F56C6C"><el-icon><Delete /></el-icon> 删除账户</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </template>
         </el-table-column>
@@ -201,8 +226,11 @@ key_file=xxx.pem"
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
+
+const router = useRouter()
 import dayjs from 'dayjs'
 
 const tenants = ref([])
@@ -218,16 +246,68 @@ const pasteContent = ref('')
 
 // ── 搜索 ────────────────────────────────────────────────────────────────────
 const searchQuery = ref('')
+const filterRegion = ref('')
+const filterStatus = ref('')
+const sortBy = ref('created_desc')
+
+const allRegionsInUse = computed(() => {
+  const regionSet = new Set()
+  for (const t of tenants.value) {
+    for (const r of (t.region || [])) {
+      regionSet.add(r)
+    }
+  }
+  return [...regionSet].sort()
+})
 
 const filteredTenants = computed(() => {
-  if (!searchQuery.value.trim()) return tenants.value
-  const q = searchQuery.value.toLowerCase()
-  return tenants.value.filter(t =>
-    t.name.toLowerCase().includes(q) ||
-    t.tenancy_ocid.toLowerCase().includes(q) ||
-    (t.user_ocid && t.user_ocid.toLowerCase().includes(q)) ||
-    (t.fingerprint && t.fingerprint.toLowerCase().includes(q))
-  )
+  let list = tenants.value
+
+  // 搜索
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter(t =>
+      t.name.toLowerCase().includes(q) ||
+      t.tenancy_ocid.toLowerCase().includes(q) ||
+      (t.user_ocid && t.user_ocid.toLowerCase().includes(q)) ||
+      (t.fingerprint && t.fingerprint.toLowerCase().includes(q))
+    )
+  }
+
+  // 区域筛选
+  if (filterRegion.value) {
+    list = list.filter(t => (t.region || []).includes(filterRegion.value))
+  }
+
+  // 状态筛选
+  if (filterStatus.value) {
+    list = list.filter(t => filterStatus.value === 'active' ? t.is_active : !t.is_active)
+  }
+
+  // 排序
+  list = [...list]
+  switch (sortBy.value) {
+    case 'created_desc':
+      list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      break
+    case 'created_asc':
+      list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      break
+    case 'name_asc':
+      list.sort((a, b) => a.name.localeCompare(b.name))
+      break
+    case 'name_desc':
+      list.sort((a, b) => b.name.localeCompare(a.name))
+      break
+    case 'region_desc':
+      list.sort((a, b) => (b.region?.length || 0) - (a.region?.length || 0))
+      break
+    case 'region_asc':
+      list.sort((a, b) => (a.region?.length || 0) - (b.region?.length || 0))
+      break
+  }
+
+  return list
 })
 
 // ── 导出 ────────────────────────────────────────────────────────────────────
@@ -480,6 +560,8 @@ async function deleteTenant(row) {
   load()
 }
 
+
+
 async function testConn(row) {
   const loading = ElMessage({ message: '正在测试连接（遍历所有区域）...', type: 'info', duration: 0 })
   try {
@@ -518,7 +600,7 @@ onMounted(() => {
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-header h2 { font-size: 22px; margin: 0; }
 .header-actions { display: flex; gap: 8px; }
-.search-bar { margin-bottom: 16px; }
+.search-bar { margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .import-section { margin-bottom: 8px; }
 .import-actions { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
 .paste-area { margin-top: 8px; }

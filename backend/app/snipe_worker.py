@@ -59,7 +59,7 @@ def _run_snipe(task_id: int, tenant_data: dict, task_data: dict, db_url: str):
         "user": tenant_data["user_ocid"],
         "fingerprint": tenant_data["fingerprint"],
         "tenancy": tenant_data["tenancy_ocid"],
-        "region": tenant_data["region"].split(",")[0].strip(),
+        "region": task_data.get("region") or tenant_data["region"].split(",")[0].strip(),
         "key_file": tmp.name,
     }
 
@@ -328,6 +328,7 @@ def resume_running_tasks():
                     "boot_volume_size_in_gbs": task.boot_volume_size_in_gbs,
                     "frequency": task.frequency,
                     "ssh_public_key": task.ssh_public_key,
+                    "region": task.region,
                 }
 
                 # 追加恢复日志

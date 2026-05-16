@@ -32,41 +32,54 @@
               <el-input
                 v-model="privateKey"
                 type="textarea"
-                :rows="10"
+                :rows="8"
                 placeholder="-----BEGIN PRIVATE KEY-----&#10;MIIEvw...&#10;-----END PRIVATE KEY-----"
                 style="font-family:monospace;font-size:12px"
               />
             </el-form-item>
           </el-form>
 
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <el-button
-              v-if="!editing && hasKey"
-              type="primary"
-              @click="editing = true"
-            >
-              <el-icon><Edit /></el-icon> 修改私钥
-            </el-button>
-            <el-button
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+            <el-upload
               v-if="editing || !hasKey"
-              type="primary"
-              :loading="saving"
-              @click="saveKey"
+              :show-file-list="false"
+              :before-upload="handleKeyFileUpload"
+              accept=".pem,.key,.txt,*"
             >
-              <el-icon><Check /></el-icon> 保存
-            </el-button>
-            <el-button
-              v-if="editing"
-              @click="cancelEdit"
-            >取消</el-button>
-            <el-button
-              v-if="hasKey"
-              type="danger"
-              plain
-              @click="clearKey"
-            >
-              <el-icon><Delete /></el-icon> 清除私钥
-            </el-button>
+              <el-button size="small">
+                <el-icon><Upload /></el-icon> 上传私钥文件
+              </el-button>
+            </el-upload>
+            <span v-else></span>
+            <div style="display:flex;gap:8px">
+              <el-button
+                v-if="!editing && hasKey"
+                type="primary"
+                @click="editing = true"
+              >
+                <el-icon><Edit /></el-icon> 修改私钥
+              </el-button>
+              <el-button
+                v-if="editing || !hasKey"
+                type="primary"
+                :loading="saving"
+                @click="saveKey"
+              >
+                <el-icon><Check /></el-icon> 保存
+              </el-button>
+              <el-button
+                v-if="editing"
+                @click="cancelEdit"
+              >取消</el-button>
+              <el-button
+                v-if="hasKey"
+                type="danger"
+                plain
+                @click="clearKey"
+              >
+                <el-icon><Delete /></el-icon> 清除私钥
+              </el-button>
+            </div>
           </div>
         </el-card>
       </el-col>
@@ -84,7 +97,7 @@
           </template>
 
           <el-alert type="info" :closable="false" style="margin-bottom:16px">
-            设置后，新建抢机任务时 SSH 公钥会自动使用此默认值，无需每次粘贴。
+            设置后，新建抢机任务时 SSH 公钥会自动使用此默认值，无需每次粘贴。公钥仅存储在数据库中。
           </el-alert>
 
           <div v-if="hasSSHKey && !sshEditing" class="key-preview">
@@ -97,51 +110,54 @@
               <el-input
                 v-model="sshPublicKey"
                 type="textarea"
-                :rows="5"
+                :rows="8"
                 placeholder="ssh-rsa AAAAB3NzaC1yc2EAAAA..."
                 style="font-family:monospace;font-size:12px"
               />
             </el-form-item>
+          </el-form>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
             <el-upload
+              v-if="sshEditing || !hasSSHKey"
               :show-file-list="false"
               :before-upload="handleSSHFileUpload"
               accept=".pub,.txt,*"
-              style="margin-top:8px"
             >
               <el-button size="small">
                 <el-icon><Upload /></el-icon> 上传公钥文件
               </el-button>
             </el-upload>
-          </el-form>
-
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <el-button
-              v-if="!sshEditing && hasSSHKey"
-              type="primary"
-              @click="sshEditing = true"
-            >
-              <el-icon><Edit /></el-icon> 修改公钥
-            </el-button>
-            <el-button
-              v-if="sshEditing || !hasSSHKey"
-              type="primary"
-              :loading="sshSaving"
-              @click="saveSSHKey"
-            >
-              <el-icon><Check /></el-icon> 保存
-            </el-button>
-            <el-button
-              v-if="sshEditing"
-              @click="cancelSSHEdit"
-            >取消</el-button>
-            <el-button
-              v-if="hasSSHKey"
-              type="danger"
-              plain
-              @click="clearSSHKey"
-            >
-              <el-icon><Delete /></el-icon> 清除公钥
-            </el-button>
+            <span v-else></span>
+            <div style="display:flex;gap:8px">
+              <el-button
+                v-if="!sshEditing && hasSSHKey"
+                type="primary"
+                @click="sshEditing = true"
+              >
+                <el-icon><Edit /></el-icon> 修改公钥
+              </el-button>
+              <el-button
+                v-if="sshEditing || !hasSSHKey"
+                type="primary"
+                :loading="sshSaving"
+                @click="saveSSHKey"
+              >
+                <el-icon><Check /></el-icon> 保存
+              </el-button>
+              <el-button
+                v-if="sshEditing"
+                @click="cancelSSHEdit"
+              >取消</el-button>
+              <el-button
+                v-if="hasSSHKey"
+                type="danger"
+                plain
+                @click="clearSSHKey"
+              >
+                <el-icon><Delete /></el-icon> 清除公钥
+              </el-button>
+            </div>
           </div>
         </el-card>
       </el-col>
@@ -252,6 +268,24 @@ async function clearKey() {
 function cancelEdit() {
   editing.value = false
   privateKey.value = ''
+}
+
+function handleKeyFileUpload(file) {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const content = e.target.result.trim()
+    if (content) {
+      privateKey.value = content
+      ElMessage.success('已读取私钥文件内容，请确认后保存')
+    } else {
+      ElMessage.error('文件内容为空')
+    }
+  }
+  reader.onerror = () => {
+    ElMessage.error('文件读取失败')
+  }
+  reader.readAsText(file)
+  return false
 }
 
 // ── SSH 公钥相关方法 ──────────────────────────────────────────────────────────

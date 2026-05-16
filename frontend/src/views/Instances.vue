@@ -12,8 +12,15 @@
 
     <el-card shadow="never" v-loading="loading">
       <el-empty v-if="!loading && instances.length === 0" description="暂无实例" />
-      <el-row :gutter="16">
-        <el-col :span="12" v-for="inst in instances" :key="inst.id" style="margin-bottom:16px">
+      <div v-for="(region, idx) in regionGroups" :key="region.name" style="margin-bottom:24px">
+        <el-divider v-if="idx > 0" />
+        <div class="region-header">
+          <el-icon><Location /></el-icon>
+          <span>{{ region.name }}</span>
+          <el-tag size="small" type="info" style="margin-left:8px">{{ region.instances.length }} 个实例</el-tag>
+        </div>
+        <el-row :gutter="16">
+          <el-col :span="12" v-for="inst in region.instances" :key="inst.id" style="margin-bottom:16px">
           <el-card class="instance-card" shadow="hover">
             <div class="inst-header">
               <span class="inst-name">{{ inst.display_name }}</span>
@@ -32,56 +39,67 @@
               <div v-if="inst.boot_volume_size_gb">
                 <el-icon><Box /></el-icon> 引导卷: {{ inst.boot_volume_size_gb }} GB
               </div>
-              <div><el-icon><Location /></el-icon> {{ inst.region }} / {{ shortAD(inst.availability_domain) }}</div>
+              <div><el-icon><Location /></el-icon> {{ shortAD(inst.availability_domain) }}</div>
               <div v-if="inst.public_ip"><el-icon><Connection /></el-icon> {{ inst.public_ip }}</div>
+              <div><el-icon><Connection /></el-icon> IPv6: {{ inst.ipv6_addresses && inst.ipv6_addresses.length ? inst.ipv6_addresses.join(', ') : '-' }}</div>
               <div v-if="inst.time_created">
                 <el-icon><Calendar /></el-icon> {{ formatDate(inst.time_created) }}
               </div>
             </div>
             <div class="inst-actions">
-              <el-button
-                v-if="inst.lifecycle_state === 'STOPPED'"
-                type="success" size="small"
-                @click="doAction(inst, 'START')"
-              >开机</el-button>
-              <el-button
-                v-if="inst.lifecycle_state === 'RUNNING'"
-                type="warning" size="small"
-                @click="doAction(inst, 'SOFTSTOP')"
-              >关机</el-button>
-              <el-button
-                v-if="inst.lifecycle_state === 'RUNNING'"
-                type="danger" size="small"
-                @click="doAction(inst, 'STOP')"
-              >强制关机</el-button>
-              <el-button
-                v-if="inst.lifecycle_state === 'RUNNING'"
-                size="small"
-                @click="doAction(inst, 'RESET')"
-              >重启</el-button>
-              <el-button
-                type="danger" size="small" plain
-                @click="doTerminate(inst)"
-              >
-                <el-icon><Delete /></el-icon> 删除实例
-              </el-button>
-              <el-button
-                size="small" plain
-                @click="openConfigDialog(inst)"
-              >
-                <el-icon><Setting /></el-icon> 更改配置
-              </el-button>
-              <el-button
-                v-if="inst.public_ip && inst.lifecycle_state === 'RUNNING'"
-                type="primary" size="small" plain
-                @click="openSSHDialog(inst)"
-              >
-                <el-icon><Monitor /></el-icon> SSH
-              </el-button>
+              <div class="inst-actions-left">
+                <el-button
+                  v-if="inst.lifecycle_state === 'STOPPED'"
+                  type="success" size="small"
+                  @click="doAction(inst, 'START')"
+                >开机</el-button>
+                <el-button
+                  v-if="inst.lifecycle_state === 'RUNNING'"
+                  type="warning" size="small"
+                  @click="doAction(inst, 'SOFTSTOP')"
+                >关机</el-button>
+                <el-button
+                  v-if="inst.lifecycle_state === 'RUNNING'"
+                  size="small"
+                  @click="doAction(inst, 'RESET')"
+                >重启</el-button>
+                <el-button
+                  v-if="inst.public_ip && inst.lifecycle_state === 'RUNNING'"
+                  type="primary" size="small" plain
+                  @click="openSSHDialog(inst)"
+                >
+                  <el-icon><Monitor /></el-icon> SSH
+                </el-button>
+              </div>
+              <el-dropdown trigger="click" @command="(cmd) => handleInstCommand(cmd, inst)">
+                <el-button size="small" plain>
+                  更多 <el-icon><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="config"><el-icon><Setting /></el-icon> 更改配置</el-dropdown-item>
+                    <el-dropdown-item command="vnc" :disabled="inst.lifecycle_state !== 'RUNNING'"><el-icon><Monitor /></el-icon> VNC 控制台</el-dropdown-item>
+                    <el-dropdown-item command="ipv6" :disabled="inst.lifecycle_state !== 'RUNNING'"><el-icon><Connection /></el-icon> 附加 IPv6</el-dropdown-item>
+                    <el-dropdown-item
+                      v-if="inst.shape.includes('E2') || inst.shape.includes('E4') || inst.shape.includes('E5')"
+                      command="enable500m"
+                      :disabled="inst.lifecycle_state !== 'RUNNING'"
+                    ><el-icon><Upload /></el-icon> 开启 500M</el-dropdown-item>
+                    <el-dropdown-item
+                      v-if="inst.shape.includes('E2') || inst.shape.includes('E4') || inst.shape.includes('E5')"
+                      command="disable500m"
+                      :disabled="inst.lifecycle_state !== 'RUNNING'"
+                    ><el-icon><Download /></el-icon> 关闭 500M</el-dropdown-item>
+                    <el-dropdown-item command="forceStop" :disabled="inst.lifecycle_state !== 'RUNNING'"><el-icon><CircleClose /></el-icon> 强制关机</el-dropdown-item>
+                    <el-dropdown-item divided command="terminate" style="color:#F56C6C"><el-icon><Delete /></el-icon> 删除实例</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </el-card>
         </el-col>
-      </el-row>
+        </el-row>
+      </div>
     </el-card>
 
     <!-- SSH 连接弹窗 -->
@@ -138,6 +156,66 @@
       </template>
     </el-dialog>
 
+    <!-- VNC 控制台弹窗 -->
+    <el-dialog v-model="vncDialogVisible" title="VNC 控制台连接" width="680px">
+      <div v-loading="vncLoading" element-loading-text="正在创建 Console Connection，请稍候（约 30-60 秒）...">
+        <template v-if="vncResult">
+          <el-alert :type="vncResult.vnc_connection_string ? 'success' : 'warning'" :closable="false" style="margin-bottom:16px">
+            <template #title>{{ vncResult.message }}</template>
+          </el-alert>
+
+          <div v-if="vncResult.vnc_connection_string" class="vnc-section">
+            <h4>VNC 连接命令</h4>
+            <p style="color:#909399;font-size:12px;margin-bottom:8px">
+              将私钥保存为文件（如 console_key.pem），然后执行以下命令建立 VNC 隧道：
+            </p>
+            <div class="vnc-cmd-box">
+              <code>{{ vncResult.vnc_connection_string }}</code>
+              <el-button size="small" type="primary" text @click="copyToClipboard(vncResult.vnc_connection_string)">复制</el-button>
+            </div>
+          </div>
+
+          <div v-if="vncResult.ssh_connection_string" class="vnc-section">
+            <h4>SSH 串行控制台命令</h4>
+            <div class="vnc-cmd-box">
+              <code>{{ vncResult.ssh_connection_string }}</code>
+              <el-button size="small" type="primary" text @click="copyToClipboard(vncResult.ssh_connection_string)">复制</el-button>
+            </div>
+          </div>
+
+          <div v-if="vncResult.private_key" class="vnc-section">
+            <h4>私钥（请妥善保存）</h4>
+            <el-input
+              :model-value="vncResult.private_key"
+              type="textarea"
+              :rows="6"
+              readonly
+            />
+            <el-button size="small" style="margin-top:8px" @click="copyToClipboard(vncResult.private_key)">
+              复制私钥
+            </el-button>
+          </div>
+
+          <el-divider />
+          <div style="color:#909399;font-size:12px">
+            <p><strong>使用方法：</strong></p>
+            <ol style="padding-left:16px">
+              <li>将上方私钥保存为文件，如 <code>console_key.pem</code>，并设置权限 <code>chmod 600 console_key.pem</code></li>
+              <li>执行 VNC 连接命令（将命令中的密钥路径替换为实际路径）</li>
+              <li>使用 VNC 客户端连接 <code>localhost:5900</code></li>
+            </ol>
+          </div>
+        </template>
+        <div v-else-if="!vncLoading" style="text-align:center;padding:40px 0;color:#909399">
+          正在准备...
+        </div>
+      </div>
+      <template #footer>
+        <el-button v-if="vncResult?.connection_id" type="danger" plain @click="doDeleteVncConnection">删除连接</el-button>
+        <el-button @click="vncDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 更改实例配置弹窗 -->
     <el-dialog v-model="configDialogVisible" title="更改实例配置" width="520px">
       <el-alert
@@ -186,7 +264,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
@@ -198,6 +276,18 @@ const tenantId = route.params.tenantId
 const instances = ref([])
 const loading = ref(false)
 const tenantName = ref('')
+
+const regionGroups = computed(() => {
+  const groups = {}
+  for (const inst of instances.value) {
+    const r = inst.region || '未知区域'
+    if (!groups[r]) groups[r] = []
+    groups[r].push(inst)
+  }
+  return Object.keys(groups)
+    .sort((a, b) => groups[b].length - groups[a].length)
+    .map(name => ({ name, instances: groups[name] }))
+})
 
 function stateType(s) {
   return { RUNNING: 'success', STOPPED: 'info', STOPPING: 'warning', STARTING: 'warning', TERMINATED: 'danger' }[s] || ''
@@ -253,6 +343,114 @@ async function doTerminate(inst) {
     await api.delete(`/instances/${tenantId}/${inst.id}`, { params: { region: inst.region } })
     ElMessage.success('删除指令已发送，实例将在数秒后终止')
     setTimeout(load, 5000)
+  } catch {}
+}
+
+// ── VNC 控制台 ──────────────────────────────────────────────────────────────
+const vncDialogVisible = ref(false)
+const vncLoading = ref(false)
+const vncResult = ref(null)
+const vncRegion = ref('')
+
+async function doStartVnc(inst) {
+  vncResult.value = null
+  vncRegion.value = inst.region
+  vncLoading.value = true
+  vncDialogVisible.value = true
+  try {
+    const res = await api.post(`/console/${tenantId}/start-vnc`, {
+      region: inst.region,
+      instance_id: inst.id,
+    })
+    vncResult.value = res.data
+  } catch (e) {
+    vncResult.value = { message: e.response?.data?.detail || '创建 VNC 连接失败' }
+  } finally {
+    vncLoading.value = false
+  }
+}
+
+async function doDeleteVncConnection() {
+  if (!vncResult.value?.connection_id) return
+  try {
+    await api.post(`/console/${tenantId}/delete-connection`, {
+      region: vncRegion.value,
+      connection_id: vncResult.value.connection_id,
+    })
+    ElMessage.success('连接已删除')
+    vncDialogVisible.value = false
+  } catch {}
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('已复制到剪贴板')
+  }).catch(() => {
+    ElMessage.error('复制失败，请手动复制')
+  })
+}
+
+// ── IPv6 & 500Mbps ──────────────────────────────────────────────────────────
+const ipv6Loading = ref(null)
+
+function handleInstCommand(command, inst) {
+  switch (command) {
+    case 'config': openConfigDialog(inst); break
+    case 'vnc': doStartVnc(inst); break
+    case 'ipv6': doAttachIpv6(inst); break
+    case 'enable500m': doEnable500M(inst); break
+    case 'disable500m': doDisable500M(inst); break
+    case 'forceStop': doAction(inst, 'STOP'); break
+    case 'terminate': doTerminate(inst); break
+  }
+}
+
+async function doAttachIpv6(inst) {
+  await ElMessageBox.confirm(
+    `为实例「${inst.display_name}」附加 IPv6 地址？\n将自动配置 VCN IPv6 CIDR、子网和安全规则。`,
+    '附加 IPv6', { type: 'info' }
+  )
+  ipv6Loading.value = inst.id
+  try {
+    const res = await api.post(`/network/${tenantId}/attach-ipv6`, {
+      region: inst.region,
+      instance_id: inst.id,
+    })
+    ElMessage.success(`IPv6 附加成功: ${res.data.ipv6_address}`)
+    setTimeout(load, 3000)
+  } catch {} finally {
+    ipv6Loading.value = null
+  }
+}
+
+async function doEnable500M(inst) {
+  await ElMessageBox.confirm(
+    `为 AMD 实例「${inst.display_name}」开启下行 500Mbps？\n将创建 Network Load Balancer 和 NAT 网关（异步执行）。`,
+    '开启 500Mbps', { type: 'warning' }
+  )
+  try {
+    await api.post(`/network/${tenantId}/enable-500m`, {
+      region: inst.region,
+      instance_id: inst.id,
+      ssh_port: 22,
+    })
+    ElMessage.success('任务已提交，请稍后查看')
+  } catch {}
+}
+
+async function doDisable500M(inst) {
+  await ElMessageBox.confirm(
+    `关闭实例「${inst.display_name}」的下行 500Mbps？\n将清理 NLB 和 NAT 网关。`,
+    '关闭 500Mbps', { type: 'warning' }
+  )
+  try {
+    await api.post(`/network/${tenantId}/disable-500m`, {
+      region: inst.region,
+      instance_id: inst.id,
+      retain_nlb: false,
+      retain_nat_gw: false,
+    })
+    ElMessage.success('关闭任务已提交')
   } catch {}
 }
 
@@ -420,5 +618,25 @@ onMounted(load)
 .inst-name { font-weight: 600; font-size: 15px; }
 .inst-info { font-size: 13px; color: #606266; display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .inst-info div { display: flex; align-items: center; gap: 6px; }
-.inst-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.inst-actions { display: flex; gap: 8px; justify-content: space-between; align-items: center; }
+.inst-actions-left { display: flex; gap: 8px; flex-wrap: wrap; }
+.region-header { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #303133; }
+.vnc-section { margin-bottom: 16px; }
+.vnc-section h4 { margin: 0 0 8px 0; font-size: 14px; }
+.vnc-cmd-box {
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  justify-content: space-between;
+}
+.vnc-cmd-box code {
+  font-size: 12px;
+  word-break: break-all;
+  flex: 1;
+  color: #303133;
+}
 </style>

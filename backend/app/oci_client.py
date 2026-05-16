@@ -63,83 +63,125 @@ def list_all_compartments(tenant, region: str = None) -> list:
 
 
 def list_instances(tenant) -> list:
-    """列出租户下所有区域、所有区间的实例（含详细配置信息）"""
+    """列出租户下所有区域、所有区间的实例（并发加速）"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     # 优先使用 region_list，如果为空则回退到 region 字符串解析
     regions = []
     if hasattr(tenant, 'region_list') and tenant.region_list:
         regions = tenant.region_list
     elif hasattr(tenant, 'region') and tenant.region:
         regions = [r.strip() for r in tenant.region.split(",") if r.strip()]
-    result = []
-    for region in regions:
+
+    def _fetch_instance_details(compute, network, block_storage, compartment_id, inst, region):
+        """获取单个实例的公网 IP、IPv6 和引导卷大小"""
+        public_ip = None
+        ipv6_addresses = []
+        try:
+            vnics = compute.list_vnic_attachments(
+                compartment_id=compartment_id, instance_id=inst.id
+            ).data
+            for vnic_att in vnics:
+                if vnic_att.lifecycle_state == "ATTACHED":
+                    vnic = network.get_vnic(vnic_id=vnic_att.vnic_id).data
+                    if not public_ip:
+                        public_ip = vnic.public_ip
+                    # 获取 IPv6 地址
+                    try:
+                        ipv6_list = network.list_ipv6s(vnic_id=vnic_att.vnic_id).data
+                        for ipv6 in ipv6_list:
+                            if ipv6.ip_address:
+                                ipv6_addresses.append(ipv6.ip_address)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        boot_volume_size_gb = None
+        try:
+            boot_vol_attachments = compute.list_boot_volume_attachments(
+                availability_domain=inst.availability_domain,
+                compartment_id=compartment_id,
+                instance_id=inst.id,
+            ).data
+            if boot_vol_attachments:
+                boot_vol = block_storage.get_boot_volume(
+                    boot_volume_id=boot_vol_attachments[0].boot_volume_id
+                ).data
+                boot_volume_size_gb = boot_vol.size_in_gbs
+        except Exception:
+            pass
+
+        ocpus = None
+        memory_in_gbs = None
+        if inst.shape_config:
+            ocpus = inst.shape_config.ocpus
+            memory_in_gbs = inst.shape_config.memory_in_gbs
+
+        return {
+            "id": inst.id,
+            "display_name": inst.display_name,
+            "lifecycle_state": inst.lifecycle_state,
+            "shape": inst.shape,
+            "ocpus": ocpus,
+            "memory_in_gbs": memory_in_gbs,
+            "boot_volume_size_gb": boot_volume_size_gb,
+            "region": region,
+            "availability_domain": inst.availability_domain,
+            "public_ip": public_ip,
+            "ipv6_addresses": ipv6_addresses,
+            "time_created": inst.time_created.isoformat() if inst.time_created else None,
+        }
+
+    def _fetch_region(region):
+        """获取单个区域的所有实例"""
+        region_results = []
         try:
             compute, config = get_compute_client(tenant, region)
             network = oci.core.VirtualNetworkClient(config)
             block_storage = oci.core.BlockstorageClient(config)
 
-            # 获取所有 compartment（根 + 子区间）
             compartment_ids = list_all_compartments(tenant, region)
 
+            # 先收集所有实例
+            all_instances = []
             for compartment_id in compartment_ids:
                 try:
                     instances_resp = compute.list_instances(compartment_id=compartment_id)
+                    for inst in instances_resp.data:
+                        if inst.lifecycle_state not in ("TERMINATED", "TERMINATING"):
+                            all_instances.append((compartment_id, inst))
                 except Exception:
                     continue
-                for inst in instances_resp.data:
-                    if inst.lifecycle_state in ("TERMINATED", "TERMINATING"):
+
+            # 并发获取每个实例的详情
+            with ThreadPoolExecutor(max_workers=8) as detail_executor:
+                futures = [
+                    detail_executor.submit(
+                        _fetch_instance_details,
+                        compute, network, block_storage, cid, inst, region
+                    )
+                    for cid, inst in all_instances
+                ]
+                for future in as_completed(futures):
+                    try:
+                        region_results.append(future.result())
+                    except Exception:
                         continue
-                    public_ip = None
-                    try:
-                        vnics = compute.list_vnic_attachments(
-                            compartment_id=compartment_id, instance_id=inst.id
-                        ).data
-                        for vnic_att in vnics:
-                            if vnic_att.lifecycle_state == "ATTACHED":
-                                vnic = network.get_vnic(vnic_id=vnic_att.vnic_id).data
-                                public_ip = vnic.public_ip
-                                break
-                    except Exception:
-                        pass
-
-                    # 获取引导卷大小
-                    boot_volume_size_gb = None
-                    try:
-                        boot_vol_attachments = compute.list_boot_volume_attachments(
-                            availability_domain=inst.availability_domain,
-                            compartment_id=compartment_id,
-                            instance_id=inst.id,
-                        ).data
-                        if boot_vol_attachments:
-                            boot_vol = block_storage.get_boot_volume(
-                                boot_volume_id=boot_vol_attachments[0].boot_volume_id
-                            ).data
-                            boot_volume_size_gb = boot_vol.size_in_gbs
-                    except Exception:
-                        pass
-
-                    # 获取 shape 配置（OCPU / 内存）
-                    ocpus = None
-                    memory_in_gbs = None
-                    if inst.shape_config:
-                        ocpus = inst.shape_config.ocpus
-                        memory_in_gbs = inst.shape_config.memory_in_gbs
-
-                    result.append({
-                        "id": inst.id,
-                        "display_name": inst.display_name,
-                        "lifecycle_state": inst.lifecycle_state,
-                        "shape": inst.shape,
-                        "ocpus": ocpus,
-                        "memory_in_gbs": memory_in_gbs,
-                        "boot_volume_size_gb": boot_volume_size_gb,
-                        "region": region,
-                        "availability_domain": inst.availability_domain,
-                        "public_ip": public_ip,
-                        "time_created": inst.time_created.isoformat() if inst.time_created else None,
-                    })
         except Exception:
-            # 某个区域查询失败不影响其他区域
-            continue
+            pass
+        return region_results
+
+    # 并发查询所有区域
+    result = []
+    with ThreadPoolExecutor(max_workers=len(regions) or 1) as region_executor:
+        futures = [region_executor.submit(_fetch_region, r) for r in regions]
+        for future in as_completed(futures):
+            try:
+                result.extend(future.result())
+            except Exception:
+                continue
+
     return result
 
 

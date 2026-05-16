@@ -14,6 +14,7 @@
             {{ tenantName(row.tenant_id) }}
           </template>
         </el-table-column>
+        <el-table-column prop="region" label="区域" width="130" />
         <el-table-column prop="shape_name" label="类型" width="80" />
         <el-table-column label="配置" width="140">
           <template #default="{ row }">
@@ -53,8 +54,13 @@
     <el-dialog v-model="dialogVisible" title="新建抢机任务" width="560px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
         <el-form-item label="云账户" prop="tenant_id">
-          <el-select v-model="form.tenant_id" placeholder="选择云账户" style="width:100%">
+          <el-select v-model="form.tenant_id" placeholder="选择云账户" style="width:100%" @change="onTenantChange">
             <el-option v-for="t in tenants" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="区域" prop="region">
+          <el-select v-model="form.region" placeholder="选择区域" style="width:100%">
+            <el-option v-for="r in selectedTenantRegions" :key="r" :label="r" :value="r" />
           </el-select>
         </el-form-item>
         <el-form-item label="实例类型" prop="shape_name">
@@ -117,6 +123,7 @@ let refreshTimer = null
 
 const form = reactive({
   tenant_id: null,
+  region: '',
   shape_name: 'arm',
   instance_ocpus: 4,
   instance_memory_in_gbs: 24,
@@ -127,7 +134,17 @@ const form = reactive({
 
 const rules = {
   tenant_id: [{ required: true, message: '请选择云账户' }],
+  region: [{ required: true, message: '请选择区域' }],
   shape_name: [{ required: true }],
+}
+
+const selectedTenantRegions = ref([])
+
+function onTenantChange(tenantId) {
+  const t = tenants.value.find(x => x.id === tenantId)
+  selectedTenantRegions.value = t?.region || []
+  // 默认选第一个区域
+  form.region = selectedTenantRegions.value.length > 0 ? selectedTenantRegions.value[0] : ''
 }
 
 function statusType(s) {
@@ -148,7 +165,8 @@ async function load() {
 }
 
 function openAdd() {
-  Object.assign(form, { tenant_id: null, shape_name: 'arm', instance_ocpus: 4, instance_memory_in_gbs: 24, boot_volume_size_in_gbs: 100, frequency: 10, ssh_public_key: '' })
+  Object.assign(form, { tenant_id: null, region: '', shape_name: 'arm', instance_ocpus: 4, instance_memory_in_gbs: 24, boot_volume_size_in_gbs: 100, frequency: 10, ssh_public_key: '' })
+  selectedTenantRegions.value = []
   dialogVisible.value = true
 }
 

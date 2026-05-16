@@ -68,6 +68,7 @@ class SnipeTask(Base):
     __tablename__ = "snipe_tasks"
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    region = Column(String(64), nullable=True)   # 指定区域，为空则使用租户第一个区域
     shape_name = Column(String(64), nullable=False)   # arm / amd
     instance_ocpus = Column(Integer, nullable=False)
     instance_memory_in_gbs = Column(Integer, nullable=False)
@@ -127,4 +128,33 @@ class NotifyConfig(Base):
     # wecom fields
     wecom_webhook = Column(String(512), nullable=True)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class IpData(Base):
+    """IP 数据（归属地信息 + 地图坐标）"""
+    __tablename__ = "ip_data"
+    id = Column(Integer, primary_key=True, index=True)
+    ip = Column(String(64), nullable=False, index=True)
+    country = Column(String(128), nullable=True)
+    area = Column(String(128), nullable=True)
+    city = Column(String(128), nullable=True)
+    org = Column(String(256), nullable=True)
+    asn = Column(String(128), nullable=True)
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
+    ip_type = Column(String(32), nullable=True)  # oracle / manual
+    tenant_name = Column(String(128), nullable=True)  # 关联的租户名称
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CloudflareCfg(Base):
+    """Cloudflare 配置"""
+    __tablename__ = "cloudflare_cfgs"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String(128), nullable=False)          # 自定义名称，如 "我的域名"
+    api_token = Column(String(512), nullable=False)     # CF API Token
+    zone_id = Column(String(128), nullable=False)       # CF Zone ID
+    domain = Column(String(256), nullable=True)         # 域名（可选，方便展示）
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -81,6 +81,7 @@ class RegionOut(BaseModel):
 # ── SnipeTask ─────────────────────────────────────────────────────────────────
 class SnipeTaskCreate(BaseModel):
     tenant_id: int
+    region: Optional[str] = None   # 指定区域，为空则使用租户第一个区域
     shape_name: str = "arm"
     instance_ocpus: int = 4
     instance_memory_in_gbs: int = 24
@@ -92,6 +93,7 @@ class SnipeTaskCreate(BaseModel):
 class SnipeTaskOut(BaseModel):
     id: int
     tenant_id: int
+    region: Optional[str] = None
     shape_name: str
     instance_ocpus: int
     instance_memory_in_gbs: int

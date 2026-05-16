@@ -27,6 +27,14 @@
           <el-icon><Aim /></el-icon>
           <template #title>抢机任务</template>
         </el-menu-item>
+        <el-menu-item index="/ip-data">
+          <el-icon><MapLocation /></el-icon>
+          <template #title>IP 数据</template>
+        </el-menu-item>
+        <el-menu-item index="/cloudflare">
+          <el-icon><Cloudy /></el-icon>
+          <template #title>Cloudflare DNS</template>
+        </el-menu-item>
         <el-menu-item index="/bills">
           <el-icon><CreditCard /></el-icon>
           <template #title>账单监控</template>
@@ -89,6 +97,8 @@ const titleMap = {
   '/dashboard': '控制台',
   '/tenants': '云账户管理',
   '/snipe': '抢机任务',
+  '/ip-data': 'IP 数据',
+  '/cloudflare': 'Cloudflare DNS',
   '/bills': '账单监控',
   '/notify': '通知配置',
   '/users': '用户管理',

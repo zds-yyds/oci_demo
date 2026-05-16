@@ -17,7 +17,7 @@ from app.database import init_db, AsyncSessionLocal
 from app import models
 from app.auth import hash_password
 from app.config import settings
-from app.routers import auth, users, tenants, instances, snipe, bills, notify, regions, oci_users, terminal, ssh_credentials
+from app.routers import auth, users, tenants, instances, snipe, bills, notify, regions, oci_users, terminal, ssh_credentials, security_rules, traffic, boot_volumes, vcn, limits, network_features, ip_data, console_connection, cloudflare
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,12 @@ async def lifespan(app: FastAPI):
         try:
             await db.execute(text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS default_ssh_public_key TEXT"
+            ))
+            await db.execute(text(
+                "ALTER TABLE ip_data ADD COLUMN IF NOT EXISTS tenant_name VARCHAR(128)"
+            ))
+            await db.execute(text(
+                "ALTER TABLE snipe_tasks ADD COLUMN IF NOT EXISTS region VARCHAR(64)"
             ))
             await db.commit()
         except Exception:
@@ -181,6 +187,15 @@ app.include_router(regions.router)
 app.include_router(oci_users.router)
 app.include_router(terminal.router)
 app.include_router(ssh_credentials.router)
+app.include_router(security_rules.router)
+app.include_router(traffic.router)
+app.include_router(boot_volumes.router)
+app.include_router(vcn.router)
+app.include_router(limits.router)
+app.include_router(network_features.router)
+app.include_router(ip_data.router)
+app.include_router(console_connection.router)
+app.include_router(cloudflare.router)
 
 
 @app.get("/api/health")

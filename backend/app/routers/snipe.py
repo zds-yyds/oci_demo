@@ -91,6 +91,7 @@ async def start_task(
         "boot_volume_size_in_gbs": task.boot_volume_size_in_gbs,
         "frequency": task.frequency,
         "ssh_public_key": task.ssh_public_key,
+        "region": task.region,
     }
     task.status = "running"
     task.log = ""
