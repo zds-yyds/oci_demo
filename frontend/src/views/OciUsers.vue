@@ -26,8 +26,11 @@
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }">{{ formatDate(row.time_created) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="100">
+        <el-table-column label="操作" width="200">
           <template #default="{ row }">
+            <el-button text size="small" type="warning" :loading="resettingMfaId === row.id" @click="resetMfa(row)">
+              <el-icon v-if="resettingMfaId !== row.id"><RefreshRight /></el-icon> 重置因素
+            </el-button>
             <el-button text size="small" type="danger" @click="deleteUser(row)">
               <el-icon><Delete /></el-icon> 删除
             </el-button>
@@ -68,6 +71,7 @@ const loading = ref(false)
 const tenantName = ref('')
 const dialogVisible = ref(false)
 const saving = ref(false)
+const resettingMfaId = ref(null)
 const formRef = ref()
 
 const form = reactive({ email: '' })
@@ -115,6 +119,23 @@ async function save() {
     ElMessage.error(msg)
   } finally {
     saving.value = false
+  }
+}
+
+async function resetMfa(row) {
+  await ElMessageBox.confirm(
+    `确认重置用户「${row.name}」的所有 MFA 认证因素？重置后用户需要重新注册 MFA 设备。`,
+    '重置认证因素', { type: 'warning' }
+  )
+  resettingMfaId.value = row.id
+  try {
+    const res = await api.post(`/oci-users/${tenantId}/${encodeURIComponent(row.id)}/reset-mfa`)
+    ElMessage.success(res.data.message || '认证因素重置成功')
+  } catch (err) {
+    const msg = err.response?.data?.detail || '重置认证因素失败'
+    ElMessage.error(msg)
+  } finally {
+    resettingMfaId.value = null
   }
 }
 

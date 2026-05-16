@@ -107,6 +107,28 @@ async def create_oci_user(
         raise HTTPException(status_code=500, detail=f"创建用户失败: {str(e)}")
 
 
+@router.post("/{tenant_id}/{user_ocid}/reset-mfa")
+async def reset_mfa_factors(
+    tenant_id: int,
+    user_ocid: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """重置用户的所有 MFA 认证因素（删除所有已注册的 TOTP 设备）"""
+    tenant = await _get_tenant(tenant_id, db, current_user)
+    try:
+        identity, config = oci_client.get_identity_client(tenant)
+        # 列出该用户所有 MFA TOTP 设备
+        devices = identity.list_mfa_totp_devices(user_id=user_ocid).data
+        deleted_count = 0
+        for device in devices:
+            identity.delete_mfa_totp_device(user_id=user_ocid, mfa_totp_device_id=device.id)
+            deleted_count += 1
+        return {"message": f"已重置用户认证因素，共删除 {deleted_count} 个 MFA 设备"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"重置认证因素失败: {str(e)}")
+
+
 @router.delete("/{tenant_id}/{user_ocid}")
 async def delete_oci_user(
     tenant_id: int,
