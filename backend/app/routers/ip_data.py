@@ -339,45 +339,63 @@ def _load_oci_ips_worker(tenant_data_list: list, sync_db_url: str):
                     import oci
                     compute = oci.core.ComputeClient(config)
                     network = oci.core.VirtualNetworkClient(config)
-                    compartment_id = tenant_data["tenancy_ocid"]
+                    identity = oci.identity.IdentityClient(config)
+                    root_compartment_id = tenant_data["tenancy_ocid"]
 
-                    instances = compute.list_instances(compartment_id=compartment_id).data
-                    for inst in instances:
-                        if inst.lifecycle_state in ("TERMINATED", "TERMINATING"):
-                            continue
+                    # 遍历所有 compartment（根 + 子区间）
+                    compartment_ids = [root_compartment_id]
+                    try:
+                        sub_compartments = identity.list_compartments(
+                            compartment_id=root_compartment_id,
+                            compartment_id_in_subtree=True,
+                            lifecycle_state="ACTIVE",
+                        ).data
+                        for c in sub_compartments:
+                            compartment_ids.append(c.id)
+                    except Exception:
+                        pass
+
+                    for compartment_id in compartment_ids:
                         try:
-                            vnics = compute.list_vnic_attachments(
-                                compartment_id=compartment_id, instance_id=inst.id
-                            ).data
-                            for va in vnics:
-                                if va.lifecycle_state != "ATTACHED":
-                                    continue
-                                vnic = network.get_vnic(vnic_id=va.vnic_id).data
-                                if vnic.public_ip:
-                                    # 查询 IP 归属地
-                                    info = _query_ip_info(vnic.public_ip)
-                                    if info:
-                                        with Session(engine) as session:
-                                            ip_record = models.IpData(
-                                                ip=info["ip"],
-                                                country=info["country"],
-                                                area=info["area"],
-                                                city=info["city"],
-                                                org=info["org"],
-                                                asn=info["asn"],
-                                                lat=info["lat"],
-                                                lng=info["lng"],
-                                                ip_type="oracle",
-                                                tenant_name=tenant_data["name"],
-                                            )
-                                            session.add(ip_record)
-                                            session.commit()
-                                        logger.info(f"[IP同步] {tenant_data['name']}/{region}: {vnic.public_ip} → {info['city']}, {info['country']}")
-                                    # ip-api.com 免费版限流 45 req/min
-                                    time.sleep(1.5)
-                        except Exception as e:
-                            logger.debug(f"[IP同步] 获取实例 VNIC 失败: {e}")
+                            instances = compute.list_instances(compartment_id=compartment_id).data
+                        except Exception:
                             continue
+                        for inst in instances:
+                            if inst.lifecycle_state in ("TERMINATED", "TERMINATING"):
+                                continue
+                            try:
+                                vnics = compute.list_vnic_attachments(
+                                    compartment_id=compartment_id, instance_id=inst.id
+                                ).data
+                                for va in vnics:
+                                    if va.lifecycle_state != "ATTACHED":
+                                        continue
+                                    vnic = network.get_vnic(vnic_id=va.vnic_id).data
+                                    if vnic.public_ip:
+                                        # 查询 IP 归属地
+                                        info = _query_ip_info(vnic.public_ip)
+                                        if info:
+                                            with Session(engine) as session:
+                                                ip_record = models.IpData(
+                                                    ip=info["ip"],
+                                                    country=info["country"],
+                                                    area=info["area"],
+                                                    city=info["city"],
+                                                    org=info["org"],
+                                                    asn=info["asn"],
+                                                    lat=info["lat"],
+                                                    lng=info["lng"],
+                                                    ip_type="oracle",
+                                                    tenant_name=tenant_data["name"],
+                                                )
+                                                session.add(ip_record)
+                                                session.commit()
+                                            logger.info(f"[IP同步] {tenant_data['name']}/{region}: {vnic.public_ip} → {info['city']}, {info['country']}")
+                                        # ip-api.com 免费版限流 45 req/min
+                                        time.sleep(1.5)
+                            except Exception as e:
+                                logger.debug(f"[IP同步] 获取实例 VNIC 失败: {e}")
+                                continue
                 except Exception as e:
                     logger.warning(f"[IP同步] 租户 {tenant_data['name']}/{region} 失败: {e}")
                     continue

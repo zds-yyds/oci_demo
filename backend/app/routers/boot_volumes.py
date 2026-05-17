@@ -1,10 +1,11 @@
 """引导卷管理 — 列表、终止、更新配置"""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from pydantic import BaseModel
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.database import get_db
 from app import models
 from app.auth import get_current_user
@@ -23,6 +24,7 @@ class BootVolumeInfo(BaseModel):
     size_in_gbs: int
     vpus_per_gb: int
     lifecycle_state: str
+    region: Optional[str] = None
     time_created: Optional[str] = None
     instance_ocpus: Optional[float] = None
     instance_memory_in_gbs: Optional[float] = None
@@ -56,89 +58,117 @@ async def _get_tenant(tenant_id: int, db: AsyncSession, current_user: models.Use
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("/{tenant_id}")
-async def list_boot_volumes(
-    tenant_id: int,
-    region: str = Query(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    """列出指定区域的所有引导卷"""
-    tenant = await _get_tenant(tenant_id, db, current_user)
+def _fetch_boot_volumes_for_region(tenant, region: str) -> list:
+    """获取单个区域的所有引导卷（含关联实例配置，遍历所有 compartment）"""
     try:
         config = oci_client.build_oci_config(tenant, region)
         block_storage = oci.core.BlockstorageClient(config)
         identity = oci.identity.IdentityClient(config)
         compute = oci.core.ComputeClient(config)
 
-        # 获取所有可用域
         ads = identity.list_availability_domains(compartment_id=tenant.tenancy_ocid).data
 
-        # 预先获取所有引导卷附件，建立 boot_volume_id -> instance_id 映射
+        # 遍历所有 compartment（与实例管理保持一致）
+        compartment_ids = oci_client.list_all_compartments(tenant, region)
+
+        # 建立 boot_volume_id -> instance_id 映射（覆盖所有 compartment）
         bv_to_instance = {}
         try:
-            for ad in ads:
-                attachments = compute.list_boot_volume_attachments(
-                    availability_domain=ad.name,
-                    compartment_id=tenant.tenancy_ocid,
-                ).data
-                for att in attachments:
-                    if att.lifecycle_state == "ATTACHED":
-                        bv_to_instance[att.boot_volume_id] = att.instance_id
+            for compartment_id in compartment_ids:
+                for ad in ads:
+                    try:
+                        attachments = compute.list_boot_volume_attachments(
+                            availability_domain=ad.name,
+                            compartment_id=compartment_id,
+                        ).data
+                        for att in attachments:
+                            if att.lifecycle_state == "ATTACHED":
+                                bv_to_instance[att.boot_volume_id] = att.instance_id
+                    except Exception:
+                        continue
         except Exception:
             pass
 
-        # 缓存实例信息，避免重复查询
         instance_cache = {}
-
         result = []
-        for ad in ads:
+        for compartment_id in compartment_ids:
+            for ad in ads:
+                try:
+                    volumes = block_storage.list_boot_volumes(
+                        availability_domain=ad.name,
+                        compartment_id=compartment_id,
+                    ).data
+                    for vol in volumes:
+                        if vol.lifecycle_state == "TERMINATED":
+                            continue
+
+                        ocpus = None
+                        memory_in_gbs = None
+                        shape = None
+
+                        inst_id = bv_to_instance.get(vol.id)
+                        if inst_id:
+                            if inst_id not in instance_cache:
+                                try:
+                                    inst = compute.get_instance(instance_id=inst_id).data
+                                    instance_cache[inst_id] = inst
+                                except Exception:
+                                    instance_cache[inst_id] = None
+                            inst = instance_cache.get(inst_id)
+                            if inst and inst.shape_config:
+                                ocpus = inst.shape_config.ocpus
+                                memory_in_gbs = inst.shape_config.memory_in_gbs
+                                shape = inst.shape
+
+                        result.append(BootVolumeInfo(
+                            id=vol.id,
+                            display_name=vol.display_name,
+                            availability_domain=vol.availability_domain,
+                            size_in_gbs=vol.size_in_gbs,
+                            vpus_per_gb=vol.vpus_per_gb,
+                            lifecycle_state=vol.lifecycle_state,
+                            region=region,
+                            time_created=vol.time_created.isoformat() if vol.time_created else None,
+                            instance_ocpus=ocpus,
+                            instance_memory_in_gbs=memory_in_gbs,
+                            instance_shape=shape,
+                        ))
+                except Exception:
+                    continue
+        return result
+    except Exception:
+        return []
+
+
+@router.get("/{tenant_id}")
+async def list_boot_volumes(
+    tenant_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """列出租户下所有区域的引导卷（并发加速）"""
+    tenant = await _get_tenant(tenant_id, db, current_user)
+
+    # 获取租户的所有区域
+    regions = []
+    if hasattr(tenant, 'region_list') and tenant.region_list:
+        regions = tenant.region_list
+    elif hasattr(tenant, 'region') and tenant.region:
+        regions = [r.strip() for r in tenant.region.split(",") if r.strip()]
+
+    if not regions:
+        return []
+
+    result = []
+    with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+        futures = [executor.submit(_fetch_boot_volumes_for_region, tenant, r) for r in regions]
+        for future in as_completed(futures):
             try:
-                volumes = block_storage.list_boot_volumes(
-                    availability_domain=ad.name,
-                    compartment_id=tenant.tenancy_ocid,
-                ).data
-                for vol in volumes:
-                    if vol.lifecycle_state == "TERMINATED":
-                        continue
-
-                    ocpus = None
-                    memory_in_gbs = None
-                    shape = None
-
-                    # 查找关联实例的配置
-                    inst_id = bv_to_instance.get(vol.id)
-                    if inst_id:
-                        if inst_id not in instance_cache:
-                            try:
-                                inst = compute.get_instance(instance_id=inst_id).data
-                                instance_cache[inst_id] = inst
-                            except Exception:
-                                instance_cache[inst_id] = None
-                        inst = instance_cache.get(inst_id)
-                        if inst and inst.shape_config:
-                            ocpus = inst.shape_config.ocpus
-                            memory_in_gbs = inst.shape_config.memory_in_gbs
-                            shape = inst.shape
-
-                    result.append(BootVolumeInfo(
-                        id=vol.id,
-                        display_name=vol.display_name,
-                        availability_domain=vol.availability_domain,
-                        size_in_gbs=vol.size_in_gbs,
-                        vpus_per_gb=vol.vpus_per_gb,
-                        lifecycle_state=vol.lifecycle_state,
-                        time_created=vol.time_created.isoformat() if vol.time_created else None,
-                        instance_ocpus=ocpus,
-                        instance_memory_in_gbs=memory_in_gbs,
-                        instance_shape=shape,
-                    ))
+                result.extend(future.result())
             except Exception:
                 continue
 
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取引导卷列表失败: {str(e)}")
+    return result
 
 
 @router.post("/{tenant_id}/terminate")

@@ -169,16 +169,23 @@ async def fetch_instances(
         network = oci.core.VirtualNetworkClient(config)
         monitoring = oci.monitoring.MonitoringClient(config)
 
-        # 列出实例
-        instances_resp = compute.list_instances(compartment_id=tenant.tenancy_ocid).data
-        active_instances = [
-            i for i in instances_resp
-            if i.lifecycle_state not in ("TERMINATED", "TERMINATING")
-        ]
+        # 遍历所有 compartment（与实例管理保持一致）
+        compartment_ids = oci_client.list_all_compartments(tenant, region)
+
+        # 列出所有 compartment 下的实例
+        active_instances = []
+        for compartment_id in compartment_ids:
+            try:
+                instances_resp = compute.list_instances(compartment_id=compartment_id).data
+                for i in instances_resp:
+                    if i.lifecycle_state not in ("TERMINATED", "TERMINATING"):
+                        active_instances.append((compartment_id, i))
+            except Exception:
+                continue
 
         instance_options = [
             InstanceOption(label=i.display_name, value=i.id)
-            for i in active_instances
+            for _, i in active_instances
         ]
 
         # 计算当月流量汇总
@@ -187,10 +194,10 @@ async def fetch_instances(
         total_in = 0
         total_out = 0
 
-        for inst in active_instances:
+        for compartment_id, inst in active_instances:
             try:
                 vnics_resp = compute.list_vnic_attachments(
-                    compartment_id=tenant.tenancy_ocid, instance_id=inst.id
+                    compartment_id=compartment_id, instance_id=inst.id
                 ).data
                 for va in vnics_resp:
                     if va.lifecycle_state != "ATTACHED":
