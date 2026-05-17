@@ -1,100 +1,131 @@
 <template>
-  <div>
-    <div class="page-header">
-      <h2>账单监控</h2>
+  <div class="space-y-6">
+    <h2 class="text-2xl font-bold text-surface-900 dark:text-white">账单监控</h2>
+
+    <!-- Selector -->
+    <div class="card p-5">
+      <div class="flex items-center gap-4">
+        <div>
+          <label class="label">选择云账户</label>
+          <select v-model="selectedTenant" class="select w-52" @change="loadBill">
+            <option :value="null" disabled>请选择</option>
+            <option v-for="t in tenants" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+        </div>
+        <div class="pt-5">
+          <button class="btn-primary" :disabled="!selectedTenant || loading" @click="loadBill">
+            {{ loading ? '加载中...' : '拉取账单' }}
+          </button>
+        </div>
+      </div>
     </div>
 
-    <el-card shadow="never" style="margin-bottom:16px">
-      <el-form inline>
-        <el-form-item label="选择云账户">
-          <el-select v-model="selectedTenant" placeholder="请选择" @change="loadBill" style="width:200px">
-            <el-option v-for="t in tenants" :key="t.id" :label="t.name" :value="t.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadBill" :loading="loading" :disabled="!selectedTenant">
-            <el-icon><Refresh /></el-icon> 拉取账单
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <el-row :gutter="16" v-if="billData">
-      <!-- Total card -->
-      <el-col :span="6">
-        <el-card shadow="never" class="total-card">
-          <div class="total-inner">
-            <el-icon size="40" color="#e6a23c"><CreditCard /></el-icon>
+    <!-- Bill data -->
+    <template v-if="billData">
+      <div class="grid grid-cols-4 gap-4">
+        <!-- Total card -->
+        <div class="card p-6">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+            </div>
             <div>
-              <div class="total-value">¥ {{ billData.total_cny }}</div>
-              <div class="total-label">本月总消费 (CNY)</div>
+              <div class="text-2xl font-bold text-amber-600 dark:text-amber-400">¥ {{ billData.total_cny }}</div>
+              <div class="text-sm text-surface-500">本月总消费 (CNY)</div>
             </div>
           </div>
-        </el-card>
-      </el-col>
-      <el-col :span="18">
-        <!-- Chart -->
-        <el-card shadow="never">
-          <template #header>每日消费趋势</template>
-          <v-chart :option="chartOption" style="height:260px" autoresize />
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
 
-    <el-card shadow="never" style="margin-top:16px" v-if="billData">
-      <template #header>账单明细</template>
-      <el-table :data="billData.items" size="small" max-height="360">
-        <el-table-column prop="start_time" label="开始时间" width="200" />
-        <el-table-column prop="end_time" label="结束时间" width="200" />
-        <el-table-column prop="currency" label="原始货币" width="100" />
-        <el-table-column label="消费 (CNY)" width="120">
-          <template #default="{ row }">
-            <span style="color:#e6a23c;font-weight:600">¥ {{ row.amount_cny }}</span>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+        <!-- Chart -->
+        <div class="col-span-3 card p-5">
+          <h3 class="font-semibold text-surface-900 dark:text-white mb-4">每日消费趋势</h3>
+          <div class="h-[240px]">
+            <Line v-if="chartData" :data="chartData" :options="chartOptions" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail table -->
+      <div class="card">
+        <div class="px-5 py-4 border-b border-surface-200 dark:border-surface-700">
+          <h3 class="font-semibold text-surface-900 dark:text-white">账单明细</h3>
+        </div>
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>开始时间</th>
+                <th>结束时间</th>
+                <th>原始货币</th>
+                <th>消费 (CNY)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, idx) in billData.items" :key="idx">
+                <td class="text-xs">{{ item.start_time }}</td>
+                <td class="text-xs">{{ item.end_time }}</td>
+                <td>{{ item.currency }}</td>
+                <td class="font-semibold text-amber-600 dark:text-amber-400">¥ {{ item.amount_cny }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
-import VChart from 'vue-echarts'
+import { Line } from 'vue-chartjs'
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js'
 import api from '@/api'
+import type { Tenant, BillData } from '@/types'
+import { useThemeStore } from '@/stores/theme'
 
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
-const tenants = ref([])
-const selectedTenant = ref(null)
-const billData = ref(null)
+const theme = useThemeStore()
+const tenants = ref<Tenant[]>([])
+const selectedTenant = ref<number | null>(null)
+const billData = ref<BillData | null>(null)
 const loading = ref(false)
 
-const chartOption = computed(() => {
-  if (!billData.value) return {}
+const chartData = computed(() => {
+  if (!billData.value) return null
   const items = billData.value.items
   return {
-    tooltip: { trigger: 'axis' },
-    xAxis: {
-      type: 'category',
-      data: items.map(i => i.end_time.split('T')[0].split(' ')[0]),
-      axisLabel: { rotate: 45, fontSize: 11 },
-    },
-    yAxis: { type: 'value', name: 'CNY' },
-    series: [{
-      name: '消费(CNY)',
-      type: 'line',
+    labels: items.map(i => i.end_time.split('T')[0].split(' ')[0]),
+    datasets: [{
+      label: '消费(CNY)',
       data: items.map(i => i.amount_cny),
-      smooth: true,
-      areaStyle: { opacity: 0.2 },
-      itemStyle: { color: '#e6a23c' },
+      borderColor: '#f59e0b',
+      backgroundColor: 'rgba(245, 158, 11, 0.1)',
+      fill: true,
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius: 6,
     }],
-    grid: { left: 60, right: 20, bottom: 60, top: 20 },
   }
 })
+
+const chartOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: {
+      grid: { color: theme.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
+      ticks: { color: theme.isDark ? '#94a3b8' : '#64748b', maxRotation: 45 },
+    },
+    y: {
+      grid: { color: theme.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
+      ticks: { color: theme.isDark ? '#94a3b8' : '#64748b' },
+    },
+  },
+}))
 
 async function loadTenants() {
   const res = await api.get('/tenants')
@@ -114,12 +145,3 @@ async function loadBill() {
 
 onMounted(loadTenants)
 </script>
-
-<style scoped>
-.page-header { margin-bottom: 20px; }
-.page-header h2 { font-size: 22px; }
-.total-card { border-radius: 12px; height: 100%; }
-.total-inner { display: flex; align-items: center; gap: 20px; padding: 16px 0; }
-.total-value { font-size: 32px; font-weight: 700; color: #e6a23c; }
-.total-label { font-size: 13px; color: #909399; margin-top: 4px; }
-</style>

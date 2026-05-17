@@ -1,95 +1,92 @@
 <template>
-  <div>
-    <div class="page-header">
-      <h2>用户管理</h2>
-      <el-button type="primary" @click="openAdd">
-        <el-icon><Plus /></el-icon> 新建用户
-      </el-button>
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <h2 class="text-2xl font-bold text-surface-900 dark:text-white">用户管理</h2>
+      <button class="btn-primary" @click="openAdd">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+        新建用户
+      </button>
     </div>
 
-    <el-card shadow="never">
-      <el-table :data="users" v-loading="loading">
-        <el-table-column prop="username" label="用户名" />
-        <el-table-column label="角色" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.is_admin ? 'danger' : 'info'" size="small">
-              {{ row.is_admin ? '管理员' : '普通用户' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="创建时间" width="170">
-          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="160">
-          <template #default="{ row }">
-            <div style="white-space:nowrap">
-              <el-button text size="small" @click="openEdit(row)">
-                <el-icon><Edit /></el-icon> 编辑
-              </el-button>
-              <el-button text size="small" type="danger" @click="deleteUser(row)">
-                <el-icon><Delete /></el-icon> 删除
-              </el-button>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <div class="card">
+      <Loading :loading="loading" />
+      <div v-if="!loading" class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>角色</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in users" :key="u.id">
+              <td class="font-medium">{{ u.username }}</td>
+              <td><span :class="u.is_admin ? 'badge-danger' : 'badge-neutral'">{{ u.is_admin ? '管理员' : '普通用户' }}</span></td>
+              <td class="text-sm text-surface-500">{{ formatDate(u.created_at) }}</td>
+              <td>
+                <div class="flex items-center gap-1">
+                  <button class="btn-ghost btn-sm" @click="openEdit(u)">编辑</button>
+                  <button class="btn-ghost btn-sm text-red-600 dark:text-red-400" @click="deleteUser(u)">删除</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-    <!-- Add/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="editId ? '编辑用户' : '新建用户'" width="420px">
-      <el-form :model="form" :rules="currentRules" ref="formRef" label-width="90px">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            show-password
-            :placeholder="editId ? '留空表示不修改' : ''"
-          />
-        </el-form-item>
-        <el-form-item label="管理员">
-          <el-switch v-model="form.is_admin" />
-        </el-form-item>
-      </el-form>
+    <!-- Dialog -->
+    <Modal :visible="dialogVisible" :title="editId ? '编辑用户' : '新建用户'" width="420px" @close="dialogVisible = false">
+      <form class="space-y-4" @submit.prevent="save">
+        <div>
+          <label class="label">用户名</label>
+          <input v-model="form.username" class="input" required />
+        </div>
+        <div>
+          <label class="label">密码</label>
+          <input v-model="form.password" type="password" class="input" :placeholder="editId ? '留空表示不修改' : ''" :required="!editId" />
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="label mb-0">管理员</label>
+          <button type="button" @click="form.is_admin = !form.is_admin" class="relative w-11 h-6 rounded-full transition-colors" :class="form.is_admin ? 'bg-primary-600' : 'bg-surface-300 dark:bg-surface-600'">
+            <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform" :class="form.is_admin ? 'translate-x-5' : ''"></span>
+          </button>
+        </div>
+      </form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">
-          {{ editId ? '保存' : '创建' }}
-        </el-button>
+        <button class="btn-secondary" @click="dialogVisible = false">取消</button>
+        <button class="btn-primary" :disabled="saving" @click="save">{{ editId ? '保存' : '创建' }}</button>
       </template>
-    </el-dialog>
+    </Modal>
   </div>
 </template>
 
-<script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+<script setup lang="ts">
+import { ref, reactive, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
 import api from '@/api'
 import dayjs from 'dayjs'
+import Modal from '@/components/Modal.vue'
+import Loading from '@/components/Loading.vue'
+import type { User } from '@/types'
 
 const auth = useAuthStore()
-const users = ref([])
+const { success, warning } = useToast()
+const { confirm } = useModal()
+
+const users = ref<User[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const saving = ref(false)
-const formRef = ref()
-const editId = ref(null)
+const editId = ref<number | null>(null)
 
 const form = reactive({ username: '', password: '', is_admin: false })
 
-const addRules = {
-  username: [{ required: true, message: '请输入用户名' }],
-  password: [{ required: true, message: '请输入密码', min: 6 }],
-}
-const editRules = {
-  username: [{ required: true, message: '请输入用户名' }],
-}
-const currentRules = computed(() => editId.value ? editRules : addRules)
-
-function formatDate(d) { return dayjs(d).format('YYYY-MM-DD HH:mm') }
+function formatDate(d: string) { return dayjs(d).format('YYYY-MM-DD HH:mm') }
 
 async function load() {
   loading.value = true
@@ -107,50 +104,42 @@ function openAdd() {
   dialogVisible.value = true
 }
 
-function openEdit(row) {
+function openEdit(row: User) {
   editId.value = row.id
   Object.assign(form, { username: row.username, password: '', is_admin: row.is_admin })
   dialogVisible.value = true
 }
 
 async function save() {
-  await formRef.value.validate()
   saving.value = true
   try {
     if (editId.value) {
-      const payload = { username: form.username, is_admin: form.is_admin }
+      const payload: any = { username: form.username, is_admin: form.is_admin }
       if (form.password) payload.password = form.password
       await api.put(`/users/${editId.value}`, payload)
-      ElMessage.success('用户更新成功')
+      success('用户更新成功')
     } else {
       await api.post('/users', form)
-      ElMessage.success('用户创建成功')
+      success('用户创建成功')
     }
     dialogVisible.value = false
     load()
-  } catch (err) {
-    const msg = err.response?.data?.detail || '操作失败'
-    ElMessage.error(msg)
   } finally {
     saving.value = false
   }
 }
 
-async function deleteUser(row) {
+async function deleteUser(row: User) {
   if (row.username === auth.user?.username) {
-    ElMessage.warning('不能删除自己')
+    warning('不能删除自己')
     return
   }
-  await ElMessageBox.confirm(`确认删除用户「${row.username}」？`, '警告', { type: 'warning' })
+  const ok = await confirm(`确认删除用户「${row.username}」？`, '警告', { type: 'warning' })
+  if (!ok) return
   await api.delete(`/users/${row.id}`)
-  ElMessage.success('删除成功')
+  success('删除成功')
   load()
 }
 
 onMounted(load)
 </script>
-
-<style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.page-header h2 { font-size: 22px; }
-</style>

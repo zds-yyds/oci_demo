@@ -1,14 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/api'
+import type { User } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || '')
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
+  const user = ref<User | null>(JSON.parse(localStorage.getItem('user') || 'null'))
 
   const isAdmin = computed(() => user.value?.is_admin || false)
 
-  async function login(username, password) {
+  async function login(username: string, password: string) {
     const res = await api.post('/auth/login', { username, password })
     token.value = res.data.access_token
     localStorage.setItem('token', token.value)

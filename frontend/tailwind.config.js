@@ -1,0 +1,61 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: '#fef2f0',
+          100: '#fde3de',
+          200: '#fcc8bd',
+          300: '#f9a08e',
+          400: '#f47258',
+          500: '#e84c30',
+          600: '#c74634',
+          700: '#a53a2b',
+          800: '#883327',
+          900: '#712f26',
+          950: '#3d150f',
+        },
+        accent: {
+          50: '#fff8ed',
+          100: '#ffeed4',
+          200: '#ffd9a8',
+          300: '#ffbe71',
+          400: '#ff9838',
+          500: '#fe7b11',
+          600: '#ef6007',
+          700: '#c64808',
+          800: '#9d390f',
+          900: '#7e3110',
+          950: '#441606',
+        },
+        surface: {
+          50: '#f9fafb',
+          100: '#f3f4f6',
+          200: '#e5e7eb',
+          300: '#d1d5db',
+          400: '#9ca3af',
+          500: '#6b7280',
+          600: '#4b5563',
+          700: '#374151',
+          800: '#1f2937',
+          900: '#111827',
+          950: '#030712',
+        },
+      },
+      borderRadius: {
+        xl: '0.75rem',
+        '2xl': '1rem',
+        '3xl': '1.5rem',
+      },
+      boxShadow: {
+        glow: '0 0 20px rgba(199, 70, 52, 0.2)',
+        card: '0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)',
+        'card-dark': '0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3)',
+      },
+    },
+  },
+  plugins: [],
+}

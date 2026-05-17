@@ -1,147 +1,199 @@
 <template>
-  <div>
-    <div class="page-header">
-      <div>
-        <el-button text @click="$router.back()"><el-icon><ArrowLeft /></el-icon> 返回</el-button>
-        <h2 style="display:inline;margin-left:8px">安全列表管理 — {{ tenantName }}</h2>
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <button class="btn-ghost btn-sm" @click="$router.back()">← 返回</button>
+        <h2 class="text-2xl font-bold text-surface-900 dark:text-white">安全列表管理 — {{ tenantName }}</h2>
       </div>
-      <el-button type="danger" @click="doReleaseAll" :loading="releaseLoading">
-        <el-icon><Unlock /></el-icon> 一键放行所有端口
-      </el-button>
+      <button class="btn-primary btn-sm" @click="doReleaseAll">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>
+        一键放行所有端口
+      </button>
     </div>
 
-    <!-- 区域 + VCN 选择 -->
-    <el-card shadow="never" style="margin-bottom:16px">
-      <el-form :inline="true">
-        <el-form-item label="区域">
-          <el-select v-model="selectedRegion" placeholder="选择区域" @change="onRegionChange" style="width:240px">
-            <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="VCN">
-          <el-select v-model="selectedVcn" placeholder="选择 VCN" @change="loadRules" style="width:300px" :loading="vcnLoading">
-            <el-option v-for="v in vcnList" :key="v.vcn_id" :label="v.display_name" :value="v.vcn_id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-radio-group v-model="ruleType" @change="loadRules">
-            <el-radio-button :value="0">入站规则</el-radio-button>
-            <el-radio-button :value="1">出站规则</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item>
-          <el-button @click="loadRules" :loading="rulesLoading"><el-icon><Refresh /></el-icon></el-button>
-          <el-button type="primary" @click="openAddDialog"><el-icon><Plus /></el-icon> 添加规则</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <!-- Filters -->
+    <div class="card p-4">
+      <div class="flex items-center gap-3 flex-wrap">
+        <span class="text-sm text-surface-500 shrink-0">区域</span>
+        <select v-model="selectedRegion" class="select w-44" @change="onRegionChange">
+          <option value="">选择区域</option>
+          <option v-for="r in regions" :key="r" :value="r">{{ r }}</option>
+        </select>
 
-    <!-- 规则列表 -->
-    <el-card shadow="never" v-loading="rulesLoading">
-      <el-empty v-if="!rulesLoading && rules.length === 0" description="暂无安全规则" />
-      <el-table :data="rules" v-if="rules.length > 0" stripe border style="width:100%">
-        <el-table-column type="selection" width="50" />
-        <el-table-column prop="is_stateless" label="无状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.is_stateless ? 'warning' : 'info'" size="small">
-              {{ row.is_stateless ? '是' : '否' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="protocol" label="协议" width="120" />
-        <el-table-column prop="source_or_destination" :label="ruleType === 0 ? '来源' : '目标'" min-width="160" />
-        <el-table-column prop="source_port" label="源端口" width="100" />
-        <el-table-column prop="destination_port" label="目标端口" width="100" />
-        <el-table-column prop="type_and_code" label="类型和代码" width="120" />
-        <el-table-column prop="description" label="描述" min-width="150" show-overflow-tooltip />
-        <el-table-column label="操作" width="80" fixed="right">
-          <template #default="{ $index }">
-            <el-button type="danger" size="small" text @click="doRemoveRule($index)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+        <span class="text-sm text-surface-500 shrink-0">VCN</span>
+        <select v-model="selectedVcn" class="select w-56" @change="loadRules">
+          <option value="">选择 VCN</option>
+          <option v-for="v in vcnList" :key="v.vcn_id" :value="v.vcn_id">{{ v.display_name }}</option>
+        </select>
 
-    <!-- 添加规则弹窗 -->
-    <el-dialog v-model="addDialogVisible" :title="ruleType === 0 ? '添加入站规则' : '添加出站规则'" width="560px">
-      <el-form :model="addForm" label-width="100px">
-        <el-form-item label="无状态">
-          <el-switch v-model="addForm.is_stateless" />
-        </el-form-item>
-        <el-form-item :label="ruleType === 0 ? '来源类型' : '目标类型'">
-          <el-select v-model="addForm.type" style="width:100%">
-            <el-option label="CIDR 块" value="CIDR_BLOCK" />
-            <el-option label="服务 CIDR" value="SERVICE_CIDR_BLOCK" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="ruleType === 0 ? '来源 CIDR' : '目标 CIDR'">
-          <el-input v-model="addForm.cidr" placeholder="0.0.0.0/0" />
-        </el-form-item>
-        <el-form-item label="协议">
-          <el-select v-model="addForm.protocol" style="width:100%">
-            <el-option label="所有协议" value="all" />
-            <el-option label="TCP (6)" value="6" />
-            <el-option label="UDP (17)" value="17" />
-            <el-option label="ICMP (1)" value="1" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="addForm.protocol === '6' || addForm.protocol === '17'" label="源端口">
-          <el-input v-model="addForm.source_port" placeholder="留空表示全部，如 80 或 1024-65535" />
-        </el-form-item>
-        <el-form-item v-if="addForm.protocol === '6' || addForm.protocol === '17'" label="目标端口">
-          <el-input v-model="addForm.destination_port" placeholder="留空表示全部，如 443 或 8000-9000" />
-        </el-form-item>
-        <el-form-item v-if="addForm.protocol === '1'" label="ICMP 类型">
-          <el-input-number v-model="addForm.icmp_type" :min="0" :max="255" />
-        </el-form-item>
-        <el-form-item v-if="addForm.protocol === '1'" label="ICMP 代码">
-          <el-input-number v-model="addForm.icmp_code" :min="0" :max="255" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="addForm.description" placeholder="可选" />
-        </el-form-item>
-      </el-form>
+        <template v-if="selectedVcn">
+          <div class="flex gap-0 shrink-0">
+            <button
+              class="px-3 py-1.5 text-sm font-medium rounded-l-lg border transition-colors"
+              :class="ruleType === 0 ? 'bg-primary-600 text-white border-primary-600' : 'bg-white dark:bg-surface-800 text-surface-600 dark:text-surface-400 border-surface-300 dark:border-surface-600'"
+              @click="ruleType = 0; loadRules()"
+            >入站规则</button>
+            <button
+              class="px-3 py-1.5 text-sm font-medium rounded-r-lg border border-l-0 transition-colors"
+              :class="ruleType === 1 ? 'bg-primary-600 text-white border-primary-600' : 'bg-white dark:bg-surface-800 text-surface-600 dark:text-surface-400 border-surface-300 dark:border-surface-600'"
+              @click="ruleType = 1; loadRules()"
+            >出站规则</button>
+          </div>
+
+          <button class="btn-ghost btn-sm shrink-0" :disabled="rulesLoading" @click="loadRules">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          </button>
+          <button class="btn-primary btn-sm shrink-0" @click="openAddDialog">+ 添加规则</button>
+        </template>
+      </div>
+    </div>
+
+    <!-- Rules Table -->
+    <div class="card overflow-hidden">
+      <Loading :loading="rulesLoading" text="加载规则中..." />
+      <div v-if="!rulesLoading && rules.length === 0" class="text-center text-surface-400 py-8">暂无安全规则</div>
+      <div v-if="!rulesLoading && rules.length > 0" class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>无状态</th>
+              <th>协议</th>
+              <th>{{ ruleType === 0 ? '来源' : '目标' }}</th>
+              <th>源端口</th>
+              <th>目标端口</th>
+              <th>类型和代码</th>
+              <th>描述</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(rule, idx) in rules" :key="idx">
+              <td>
+                <span :class="rule.is_stateless ? 'badge-warning' : 'badge-neutral'">{{ rule.is_stateless ? '是' : '否' }}</span>
+              </td>
+              <td>{{ rule.protocol }}</td>
+              <td class="text-xs font-mono">{{ rule.source_or_destination || '-' }}</td>
+              <td class="text-xs">{{ rule.source_port || '' }}</td>
+              <td class="text-xs">{{ rule.destination_port || '' }}</td>
+              <td class="text-xs">{{ rule.type_and_code || '' }}</td>
+              <td class="max-w-[150px] truncate text-xs" :title="rule.description">{{ rule.description || '' }}</td>
+              <td>
+                <button class="btn-ghost btn-sm text-red-600 dark:text-red-400" @click="doRemoveRule(idx)">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Add Rule Modal -->
+    <Modal :visible="addDialogVisible" title="添加安全规则" width="560px" @close="addDialogVisible = false">
+      <div class="space-y-4">
+        <div>
+          <label class="label">方向</label>
+          <div class="flex gap-2">
+            <button type="button" @click="addForm.direction = 'INGRESS'" class="flex-1 py-2 rounded-lg border text-sm font-medium transition-all" :class="addForm.direction === 'INGRESS' ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-300' : 'border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-400'">
+              入站 (Ingress)
+            </button>
+            <button type="button" @click="addForm.direction = 'EGRESS'" class="flex-1 py-2 rounded-lg border text-sm font-medium transition-all" :class="addForm.direction === 'EGRESS' ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-300' : 'border-surface-300 dark:border-surface-600 text-surface-600 dark:text-surface-400'">
+              出站 (Egress)
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" v-model="addForm.is_stateless" id="stateless" class="accent-primary-600" />
+          <label for="stateless" class="text-sm text-surface-700 dark:text-surface-300">无状态</label>
+        </div>
+        <div>
+          <label class="label">{{ addForm.direction === 'INGRESS' ? '来源类型' : '目标类型' }}</label>
+          <select v-model="addForm.type" class="select">
+            <option value="CIDR_BLOCK">CIDR 块</option>
+            <option value="SERVICE_CIDR_BLOCK">服务 CIDR</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">{{ addForm.direction === 'INGRESS' ? '来源 CIDR' : '目标 CIDR' }}</label>
+          <input v-model="addForm.cidr" class="input" placeholder="0.0.0.0/0" />
+        </div>
+        <div>
+          <label class="label">协议</label>
+          <select v-model="addForm.protocol" class="select">
+            <option value="all">所有协议</option>
+            <option value="6">TCP (6)</option>
+            <option value="17">UDP (17)</option>
+            <option value="1">ICMP (1)</option>
+          </select>
+        </div>
+        <div v-if="addForm.protocol === '6' || addForm.protocol === '17'">
+          <label class="label">源端口</label>
+          <input v-model="addForm.source_port" class="input" placeholder="留空表示全部，如 80 或 1024-65535" />
+        </div>
+        <div v-if="addForm.protocol === '6' || addForm.protocol === '17'">
+          <label class="label">目标端口</label>
+          <input v-model="addForm.destination_port" class="input" placeholder="留空表示全部，如 443 或 8000-9000" />
+        </div>
+        <div v-if="addForm.protocol === '1'">
+          <label class="label">ICMP 类型</label>
+          <input v-model.number="addForm.icmp_type" type="number" class="input" min="0" max="255" placeholder="0-255" />
+        </div>
+        <div v-if="addForm.protocol === '1'">
+          <label class="label">ICMP 代码</label>
+          <input v-model.number="addForm.icmp_code" type="number" class="input" min="0" max="255" placeholder="0-255" />
+        </div>
+        <div>
+          <label class="label">描述</label>
+          <input v-model="addForm.description" class="input" placeholder="可选" />
+        </div>
+      </div>
       <template #footer>
-        <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="addLoading" @click="doAddRule">确认添加</el-button>
+        <button class="btn-secondary" @click="addDialogVisible = false">取消</button>
+        <button class="btn-primary" :disabled="addLoading" @click="doAddRule">
+          {{ addLoading ? '添加中...' : '确认添加' }}
+        </button>
       </template>
-    </el-dialog>
+    </Modal>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
+import { useToast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
+import Modal from '@/components/Modal.vue'
+import Loading from '@/components/Loading.vue'
 
 const route = useRoute()
-const tenantId = route.params.tenantId
-const tenantName = ref('')
-const regions = ref([])
-const selectedRegion = ref('')
-const vcnList = ref([])
-const selectedVcn = ref('')
-const vcnLoading = ref(false)
-const ruleType = ref(0)
-const rules = ref([])
-const rulesLoading = ref(false)
-const releaseLoading = ref(false)
+const { success, warning } = useToast()
+const { confirm } = useModal()
 
-// 添加规则
+const tenantId = route.params.tenantId as string
+const tenantName = ref('')
+const regions = ref<string[]>([])
+const selectedRegion = ref('')
+const vcnList = ref<any[]>([])
+const selectedVcn = ref('')
+const rules = ref<any[]>([])
+const rulesLoading = ref(false)
+const ruleType = ref(0) // 0=入站, 1=出站
+
+// ── Add Rule ─────────────────────────────────────────────────────────────────
 const addDialogVisible = ref(false)
 const addLoading = ref(false)
 const addForm = reactive({
+  direction: 'INGRESS' as 'INGRESS' | 'EGRESS',
   is_stateless: false,
   type: 'CIDR_BLOCK',
   cidr: '0.0.0.0/0',
   protocol: 'all',
   source_port: '',
   destination_port: '',
-  icmp_type: null,
-  icmp_code: null,
+  icmp_type: null as number | null,
+  icmp_code: null as number | null,
   description: '',
 })
 
@@ -154,7 +206,7 @@ async function loadTenant() {
       selectedRegion.value = regions.value[0]
       await loadVcns()
     }
-  } catch {}
+  } catch { /* handled by interceptor */ }
 }
 
 async function onRegionChange() {
@@ -165,19 +217,14 @@ async function onRegionChange() {
 
 async function loadVcns() {
   if (!selectedRegion.value) return
-  vcnLoading.value = true
   try {
-    const res = await api.get(`/security-rules/${tenantId}/vcns`, {
-      params: { region: selectedRegion.value }
-    })
+    const res = await api.get(`/security-rules/${tenantId}/vcns`, { params: { region: selectedRegion.value } })
     vcnList.value = res.data
     if (vcnList.value.length > 0) {
       selectedVcn.value = vcnList.value[0].vcn_id
       await loadRules()
     }
-  } catch {} finally {
-    vcnLoading.value = false
-  }
+  } catch { /* handled by interceptor */ }
 }
 
 async function loadRules() {
@@ -185,55 +232,47 @@ async function loadRules() {
   rulesLoading.value = true
   try {
     const res = await api.get(`/security-rules/${tenantId}/rules`, {
-      params: {
-        region: selectedRegion.value,
-        vcn_id: selectedVcn.value,
-        rule_type: ruleType.value,
-      }
+      params: { region: selectedRegion.value, vcn_id: selectedVcn.value, rule_type: ruleType.value }
     })
-    rules.value = res.data.rules
-  } catch {} finally {
-    rulesLoading.value = false
-  }
+    rules.value = res.data.rules || res.data
+  } catch { /* handled by interceptor */ } finally { rulesLoading.value = false }
 }
 
 function openAddDialog() {
-  if (!selectedVcn.value) {
-    ElMessage.warning('请先选择 VCN')
-    return
-  }
-  addForm.is_stateless = false
-  addForm.type = 'CIDR_BLOCK'
-  addForm.cidr = '0.0.0.0/0'
-  addForm.protocol = 'all'
-  addForm.source_port = ''
-  addForm.destination_port = ''
-  addForm.icmp_type = null
-  addForm.icmp_code = null
-  addForm.description = ''
+  if (!selectedVcn.value) { warning('请先选择 VCN'); return }
+  Object.assign(addForm, {
+    direction: ruleType.value === 0 ? 'INGRESS' : 'EGRESS',
+    is_stateless: false,
+    type: 'CIDR_BLOCK',
+    cidr: '0.0.0.0/0',
+    protocol: 'all',
+    source_port: '',
+    destination_port: '',
+    icmp_type: null,
+    icmp_code: null,
+    description: '',
+  })
   addDialogVisible.value = true
 }
 
 async function doAddRule() {
   addLoading.value = true
   try {
-    const endpoint = ruleType.value === 0 ? 'ingress' : 'egress'
-    const payload = {
+    const endpoint = addForm.direction === 'INGRESS' ? 'ingress' : 'egress'
+    const payload: any = {
       region: selectedRegion.value,
       vcn_id: selectedVcn.value,
       is_stateless: addForm.is_stateless,
       protocol: addForm.protocol,
       description: addForm.description || null,
     }
-
-    if (ruleType.value === 0) {
-      payload.source_type = addForm.type
+    if (addForm.direction === 'INGRESS') {
       payload.source = addForm.cidr
+      payload.source_type = addForm.type
     } else {
-      payload.destination_type = addForm.type
       payload.destination = addForm.cidr
+      payload.destination_type = addForm.type
     }
-
     if (addForm.protocol === '6' || addForm.protocol === '17') {
       payload.source_port = addForm.source_port || null
       payload.destination_port = addForm.destination_port || null
@@ -242,18 +281,16 @@ async function doAddRule() {
       payload.icmp_type = addForm.icmp_type
       payload.icmp_code = addForm.icmp_code
     }
-
     await api.post(`/security-rules/${tenantId}/${endpoint}`, payload)
-    ElMessage.success('规则添加成功')
+    success('规则添加成功')
     addDialogVisible.value = false
     await loadRules()
-  } catch {} finally {
-    addLoading.value = false
-  }
+  } catch { /* handled by interceptor */ } finally { addLoading.value = false }
 }
 
-async function doRemoveRule(index) {
-  await ElMessageBox.confirm('确认删除该安全规则？', '确认', { type: 'warning' })
+async function doRemoveRule(index: number) {
+  const ok = await confirm('确认删除该安全规则？', '确认', { type: 'warning' })
+  if (!ok) return
   try {
     await api.post(`/security-rules/${tenantId}/remove`, {
       region: selectedRegion.value,
@@ -261,36 +298,23 @@ async function doRemoveRule(index) {
       rule_type: ruleType.value,
       indices: [index],
     })
-    ElMessage.success('规则删除成功')
+    success('规则删除成功')
     await loadRules()
-  } catch {}
+  } catch { /* handled by interceptor */ }
 }
 
 async function doReleaseAll() {
-  if (!selectedRegion.value) {
-    ElMessage.warning('请先选择区域')
-    return
-  }
-  await ElMessageBox.confirm(
-    '将为当前区域所有 VCN 添加 0.0.0.0/0 和 ::/0 的全协议放行规则，确认继续？',
-    '一键放行所有端口',
-    { type: 'warning' }
-  )
-  releaseLoading.value = true
+  if (!selectedRegion.value) { warning('请先选择区域'); return }
+  const ok = await confirm('将为当前区域所有 VCN 添加 0.0.0.0/0 和 ::/0 的全协议放行规则，确认继续？', '一键放行所有端口', { type: 'warning' })
+  if (!ok) return
   try {
     const res = await api.post(`/security-rules/${tenantId}/release-all`, {
       region: selectedRegion.value,
     })
-    ElMessage.success(res.data.message)
+    success(res.data.message || '已放行所有端口')
     await loadRules()
-  } catch {} finally {
-    releaseLoading.value = false
-  }
+  } catch { /* handled by interceptor */ }
 }
 
 onMounted(loadTenant)
 </script>
-
-<style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-</style>

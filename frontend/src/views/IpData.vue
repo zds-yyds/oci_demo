@@ -1,163 +1,200 @@
 <template>
-  <div>
-    <div class="page-header">
-      <h2>IP 数据管理</h2>
-      <div class="header-actions">
-        <el-button type="primary" @click="openAddDialog"><el-icon><Plus /></el-icon> 添加 IP</el-button>
-        <el-button type="success" @click="doLoadFromOci" :loading="loadOciLoading">
-          <el-icon><Download /></el-icon> 从 OCI 加载
-        </el-button>
-        <el-button @click="showMap = !showMap">
-          <el-icon><MapLocation /></el-icon> {{ showMap ? '隐藏地图' : '显示地图' }}
-        </el-button>
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <h2 class="text-2xl font-bold text-surface-900 dark:text-white">IP 数据管理</h2>
+      <div class="flex items-center gap-2">
+        <button class="btn-primary" @click="openAddDialog">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          添加 IP
+        </button>
+        <button class="btn-secondary" :disabled="loadOciLoading" @click="doLoadFromOci">
+          {{ loadOciLoading ? '加载中...' : '从 OCI 加载' }}
+        </button>
+        <button class="btn-ghost" @click="showMap = !showMap">
+          {{ showMap ? '隐藏地图' : '显示地图' }}
+        </button>
       </div>
     </div>
 
-    <!-- 全球服务器地图 (Leaflet) -->
-    <el-card v-if="showMap" shadow="never" style="margin-bottom:16px">
-      <template #header>
-        <span>全球服务器分布</span>
-        <el-tag size="small" style="margin-left:8px">{{ mapPoints.length }} 个节点</el-tag>
-      </template>
-      <div ref="mapContainer" class="leaflet-map"></div>
-    </el-card>
-
-    <!-- IP 查询工具 -->
-    <el-card shadow="never" style="margin-bottom:16px">
-      <el-form :inline="true">
-        <el-form-item label="IP 查询">
-          <el-input v-model="queryIp" placeholder="输入 IP 地址查询归属地" style="width:220px" @keyup.enter="doQueryIp" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="doQueryIp" :loading="queryLoading">查询</el-button>
-        </el-form-item>
-      </el-form>
-      <el-descriptions v-if="queryResult" :column="4" border size="small" style="margin-top:12px">
-        <el-descriptions-item label="IP">{{ queryResult.ip }}</el-descriptions-item>
-        <el-descriptions-item label="国家">{{ queryResult.country }}</el-descriptions-item>
-        <el-descriptions-item label="地区">{{ queryResult.area }}</el-descriptions-item>
-        <el-descriptions-item label="城市">{{ queryResult.city }}</el-descriptions-item>
-        <el-descriptions-item label="运营商">{{ queryResult.org }}</el-descriptions-item>
-        <el-descriptions-item label="ASN">{{ queryResult.asn }}</el-descriptions-item>
-        <el-descriptions-item label="纬度">{{ queryResult.lat }}</el-descriptions-item>
-        <el-descriptions-item label="经度">{{ queryResult.lng }}</el-descriptions-item>
-      </el-descriptions>
-    </el-card>
-
-    <!-- IP 数据列表 -->
-    <el-card shadow="never" v-loading="tableLoading">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span>IP 数据列表</span>
-          <el-input v-model="searchKeyword" placeholder="搜索 IP / 国家 / 城市..." clearable style="width:260px" @input="loadTable" />
-        </div>
-      </template>
-      <el-table :data="tableData" stripe border @selection-change="onSelectionChange">
-        <el-table-column type="selection" width="50" />
-        <el-table-column prop="tenant_name" label="租户" width="130" show-overflow-tooltip />
-        <el-table-column prop="ip" label="IP" width="140" />
-        <el-table-column prop="country" label="国家" width="100" />
-        <el-table-column prop="area" label="地区" width="120" />
-        <el-table-column prop="city" label="城市" width="120" />
-        <el-table-column prop="org" label="运营商" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="asn" label="ASN" width="160" show-overflow-tooltip />
-        <el-table-column prop="ip_type" label="类型" width="80">
-          <template #default="{ row }">
-            <el-tag v-if="row.ip_type === 'oracle'" type="warning" size="small">OCI</el-tag>
-            <el-tag v-else type="info" size="small">手动</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" text @click="doRefresh(row)"><el-icon><Refresh /></el-icon></el-button>
-            <el-button size="small" text type="danger" @click="doRemove([row.id])"><el-icon><Delete /></el-icon></el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
-        <div>
-          <el-button v-if="selectedIds.length > 0" type="danger" size="small" @click="doRemove(selectedIds)">
-            批量删除 ({{ selectedIds.length }})
-          </el-button>
-        </div>
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[20, 50, 100]"
-          layout="total, sizes, prev, pager, next"
-          @current-change="loadTable"
-          @size-change="loadTable"
-        />
+    <!-- Map -->
+    <div v-if="showMap" class="card p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="font-semibold text-surface-900 dark:text-white">全球服务器分布</span>
+        <span class="badge-info">{{ mapPoints.length }} 个节点</span>
       </div>
-    </el-card>
+      <div ref="mapContainer" class="w-full h-[380px] rounded-lg"></div>
+    </div>
 
-    <!-- 添加 IP 弹窗 -->
-    <el-dialog v-model="addDialogVisible" title="添加 IP" width="400px">
-      <el-form label-width="60px">
-        <el-form-item label="IP">
-          <el-input v-model="addIp" placeholder="如 8.8.8.8" />
-        </el-form-item>
-      </el-form>
+    <!-- IP Query -->
+    <div class="card p-4">
+      <div class="flex items-center gap-3 mb-3">
+        <label class="label mb-0">IP 查询</label>
+        <input v-model="queryIp" class="input" style="width:220px" placeholder="输入 IP 地址查询归属地" @keyup.enter="doQueryIp" />
+        <button class="btn-primary btn-sm" :disabled="queryLoading" @click="doQueryIp">
+          {{ queryLoading ? '查询中...' : '查询' }}
+        </button>
+      </div>
+      <div v-if="queryResult" class="grid grid-cols-4 gap-3 mt-3 text-sm">
+        <div class="bg-surface-50 dark:bg-surface-900 rounded-lg p-2">
+          <span class="text-surface-500">IP</span>
+          <div class="font-medium">{{ queryResult.ip }}</div>
+        </div>
+        <div class="bg-surface-50 dark:bg-surface-900 rounded-lg p-2">
+          <span class="text-surface-500">国家</span>
+          <div class="font-medium">{{ queryResult.country }}</div>
+        </div>
+        <div class="bg-surface-50 dark:bg-surface-900 rounded-lg p-2">
+          <span class="text-surface-500">地区</span>
+          <div class="font-medium">{{ queryResult.area }}</div>
+        </div>
+        <div class="bg-surface-50 dark:bg-surface-900 rounded-lg p-2">
+          <span class="text-surface-500">城市</span>
+          <div class="font-medium">{{ queryResult.city }}</div>
+        </div>
+        <div class="bg-surface-50 dark:bg-surface-900 rounded-lg p-2">
+          <span class="text-surface-500">运营商</span>
+          <div class="font-medium">{{ queryResult.org }}</div>
+        </div>
+        <div class="bg-surface-50 dark:bg-surface-900 rounded-lg p-2">
+          <span class="text-surface-500">ASN</span>
+          <div class="font-medium">{{ queryResult.asn }}</div>
+        </div>
+        <div class="bg-surface-50 dark:bg-surface-900 rounded-lg p-2">
+          <span class="text-surface-500">纬度</span>
+          <div class="font-medium">{{ queryResult.lat }}</div>
+        </div>
+        <div class="bg-surface-50 dark:bg-surface-900 rounded-lg p-2">
+          <span class="text-surface-500">经度</span>
+          <div class="font-medium">{{ queryResult.lng }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IP Data Table -->
+    <div class="card">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-surface-200 dark:border-surface-700">
+        <span class="font-semibold text-surface-900 dark:text-white">IP 数据列表</span>
+        <input v-model="searchKeyword" class="input" style="width:260px" placeholder="搜索 IP / 国家 / 城市..." @input="debouncedLoadTable" />
+      </div>
+      <Loading :loading="tableLoading" text="加载中..." />
+      <div v-if="!tableLoading" class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" @change="toggleSelectAll" :checked="isAllSelected" class="accent-primary-600" /></th>
+              <th>租户</th>
+              <th>IP</th>
+              <th>国家</th>
+              <th>地区</th>
+              <th>城市</th>
+              <th>运营商</th>
+              <th>ASN</th>
+              <th>类型</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in tableData" :key="row.id">
+              <td><input type="checkbox" :checked="selectedIds.includes(row.id)" @change="toggleSelect(row.id)" class="accent-primary-600" /></td>
+              <td>{{ row.tenant_name }}</td>
+              <td class="font-mono text-xs">{{ row.ip }}</td>
+              <td>{{ row.country }}</td>
+              <td>{{ row.area }}</td>
+              <td>{{ row.city }}</td>
+              <td class="max-w-[180px] truncate" :title="row.org">{{ row.org }}</td>
+              <td class="text-xs">{{ row.asn }}</td>
+              <td>
+                <span :class="row.ip_type === 'oracle' ? 'badge-warning' : 'badge-neutral'">
+                  {{ row.ip_type === 'oracle' ? 'OCI' : '手动' }}
+                </span>
+              </td>
+              <td>
+                <div class="flex items-center gap-1">
+                  <button class="btn-ghost btn-sm" @click="doRefresh(row)">刷新</button>
+                  <button class="btn-ghost btn-sm text-red-600" @click="doRemove([row.id])">删除</button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="tableData.length === 0 && !tableLoading">
+              <td colspan="10" class="text-center text-surface-400 py-8">暂无数据</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex items-center justify-between px-5 py-3 border-t border-surface-200 dark:border-surface-700">
+        <div>
+          <button v-if="selectedIds.length > 0" class="btn-danger btn-sm" @click="doRemove(selectedIds)">
+            批量删除 ({{ selectedIds.length }})
+          </button>
+        </div>
+        <div class="flex items-center gap-3 text-sm text-surface-600 dark:text-surface-400">
+          <span>共 {{ total }} 条</span>
+          <select v-model.number="pageSize" class="select" style="width:80px" @change="loadTable">
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+          <div class="flex items-center gap-1">
+            <button class="btn-ghost btn-sm" :disabled="currentPage <= 1" @click="currentPage--; loadTable()">上一页</button>
+            <span>{{ currentPage }} / {{ totalPages }}</span>
+            <button class="btn-ghost btn-sm" :disabled="currentPage >= totalPages" @click="currentPage++; loadTable()">下一页</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add IP Modal -->
+    <Modal :visible="addDialogVisible" title="添加 IP" width="400px" @close="addDialogVisible = false">
+      <div>
+        <label class="label">IP 地址</label>
+        <input v-model="addIp" class="input" placeholder="如 8.8.8.8" @keyup.enter="doAdd" />
+      </div>
       <template #footer>
-        <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="addLoading" @click="doAdd">添加</el-button>
+        <button class="btn-secondary" @click="addDialogVisible = false">取消</button>
+        <button class="btn-primary" :disabled="addLoading" @click="doAdd">
+          {{ addLoading ? '添加中...' : '添加' }}
+        </button>
       </template>
-    </el-dialog>
+    </Modal>
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+<script setup lang="ts">
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import api from '@/api'
+import { useToast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
+import Modal from '@/components/Modal.vue'
+import Loading from '@/components/Loading.vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-// ── Leaflet 地图 ─────────────────────────────────────────────────────────────
+const { success, warning, error } = useToast()
+const { confirm } = useModal()
+
+// ── Map ──────────────────────────────────────────────────────────────────────
 const showMap = ref(true)
-const mapPoints = ref([])
-const mapContainer = ref(null)
-let leafletMap = null
-let markersLayer = null
+const mapPoints = ref<any[]>([])
+const mapContainer = ref<HTMLElement | null>(null)
+let leafletMap: L.Map | null = null
+let markersLayer: L.LayerGroup | null = null
 
 function initMap() {
   if (!mapContainer.value || leafletMap) return
-  leafletMap = L.map(mapContainer.value, {
-    center: [20, 0],
-    zoom: 2,
-    minZoom: 2,
-    maxZoom: 18,
-    zoomControl: true,
-    attributionControl: false,
-  })
-
-  // 图层：街道地图 + 卫星影像
-  const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-  })
-  const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 18,
-  })
-
+  leafletMap = L.map(mapContainer.value, { center: [20, 0], zoom: 2, minZoom: 2, maxZoom: 18, attributionControl: false })
+  const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 })
+  const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 })
   streetLayer.addTo(leafletMap)
-
-  L.control.layers(
-    { '街道地图': streetLayer, '卫星影像': satelliteLayer },
-    null,
-    { position: 'topright' }
-  ).addTo(leafletMap)
-
+  L.control.layers({ '街道地图': streetLayer, '卫星影像': satelliteLayer }, undefined, { position: 'topright' }).addTo(leafletMap)
   markersLayer = L.layerGroup().addTo(leafletMap)
   updateMarkers()
 }
 
 function destroyMap() {
-  if (leafletMap) {
-    leafletMap.remove()
-    leafletMap = null
-    markersLayer = null
-  }
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; markersLayer = null }
 }
 
 function updateMarkers() {
@@ -165,47 +202,29 @@ function updateMarkers() {
   markersLayer.clearLayers()
   for (const p of mapPoints.value) {
     if (p.lat == null || p.lng == null) continue
-    const marker = L.circleMarker([p.lat, p.lng], {
-      radius: 8,
-      fillColor: '#409EFF',
-      color: '#fff',
-      weight: 2,
-      opacity: 1,
-      fillOpacity: 0.8,
-    })
-    marker.bindPopup(`<b>${p.tenant_name || ''}</b>${p.tenant_name ? '<br/>' : ''}<b>${p.ip}</b><br/>${p.city || ''}, ${p.country || ''}<br/>${p.org || ''}<br/><a href="https://www.itdog.cn/ping/${p.ip}" target="_blank" style="display:inline-block;margin-top:6px;padding:2px 10px;background:#409EFF;color:#fff;border-radius:4px;text-decoration:none;font-size:12px;">测 Ping</a>`)
+    const marker = L.circleMarker([p.lat, p.lng], { radius: 8, fillColor: '#3b82f6', color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.8 })
+    marker.bindPopup(`<b>${p.tenant_name || ''}</b>${p.tenant_name ? '<br/>' : ''}<b>${p.ip}</b><br/>${p.city || ''}, ${p.country || ''}<br/>${p.org || ''}`)
     markersLayer.addLayer(marker)
   }
-  // 自适应缩放到所有标记
   if (mapPoints.value.length > 0) {
-    const bounds = L.latLngBounds(mapPoints.value.filter(p => p.lat && p.lng).map(p => [p.lat, p.lng]))
-    if (bounds.isValid()) {
-      leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 })
+    const valid = mapPoints.value.filter(p => p.lat && p.lng)
+    if (valid.length) {
+      const bounds = L.latLngBounds(valid.map(p => [p.lat, p.lng] as [number, number]))
+      if (bounds.isValid()) leafletMap?.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 })
     }
   }
 }
 
 watch(showMap, async (val) => {
-  if (val) {
-    await nextTick()
-    initMap()
-  } else {
-    destroyMap()
-  }
+  if (val) { await nextTick(); initMap() } else { destroyMap() }
 })
+watch(mapPoints, () => updateMarkers())
+onBeforeUnmount(() => destroyMap())
 
-watch(mapPoints, () => {
-  updateMarkers()
-})
-
-onBeforeUnmount(() => {
-  destroyMap()
-})
-
-// ── IP 查询 ──────────────────────────────────────────────────────────────────
+// ── IP Query ─────────────────────────────────────────────────────────────────
 const queryIp = ref('')
 const queryLoading = ref(false)
-const queryResult = ref(null)
+const queryResult = ref<any>(null)
 
 async function doQueryIp() {
   if (!queryIp.value.trim()) return
@@ -214,39 +233,54 @@ async function doQueryIp() {
   try {
     const res = await api.get('/ip-data/query', { params: { ip: queryIp.value.trim() } })
     queryResult.value = res.data
-  } catch {} finally { queryLoading.value = false }
+  } catch { /* handled by interceptor */ } finally { queryLoading.value = false }
 }
 
-// ── 表格 ─────────────────────────────────────────────────────────────────────
-const tableData = ref([])
+// ── Table ────────────────────────────────────────────────────────────────────
+const tableData = ref<any[]>([])
 const tableLoading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const searchKeyword = ref('')
-const selectedIds = ref([])
+const selectedIds = ref<number[]>([])
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+const isAllSelected = computed(() => tableData.value.length > 0 && tableData.value.every(r => selectedIds.value.includes(r.id)))
+
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+function debouncedLoadTable() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => { currentPage.value = 1; loadTable() }, 300)
+}
+
+function toggleSelectAll(e: Event) {
+  const checked = (e.target as HTMLInputElement).checked
+  selectedIds.value = checked ? tableData.value.map(r => r.id) : []
+}
+
+function toggleSelect(id: number) {
+  const idx = selectedIds.value.indexOf(id)
+  if (idx === -1) selectedIds.value.push(id)
+  else selectedIds.value.splice(idx, 1)
+}
 
 async function loadTable() {
   tableLoading.value = true
   try {
-    const params = { page: currentPage.value, page_size: pageSize.value }
+    const params: any = { page: currentPage.value, page_size: pageSize.value }
     if (searchKeyword.value) params.keyword = searchKeyword.value
     const res = await api.get('/ip-data/list', { params })
     tableData.value = res.data.items
     total.value = res.data.total
-  } catch {} finally { tableLoading.value = false }
+  } catch { /* handled by interceptor */ } finally { tableLoading.value = false }
 }
 
 async function loadMapData() {
-  try {
-    const res = await api.get('/ip-data/map')
-    mapPoints.value = res.data
-  } catch {}
+  try { const res = await api.get('/ip-data/map'); mapPoints.value = res.data } catch { /* ignore */ }
 }
 
-function onSelectionChange(rows) { selectedIds.value = rows.map(r => r.id) }
-
-// ── 添加 ─────────────────────────────────────────────────────────────────────
+// ── Add ──────────────────────────────────────────────────────────────────────
 const addDialogVisible = ref(false)
 const addIp = ref('')
 const addLoading = ref(false)
@@ -254,55 +288,55 @@ const addLoading = ref(false)
 function openAddDialog() { addIp.value = ''; addDialogVisible.value = true }
 
 async function doAdd() {
-  if (!addIp.value.trim()) { ElMessage.warning('请输入 IP'); return }
+  if (!addIp.value.trim()) { warning('请输入 IP'); return }
   addLoading.value = true
   try {
     await api.post('/ip-data/add', { ip: addIp.value.trim() })
-    ElMessage.success('添加成功')
+    success('添加成功')
     addDialogVisible.value = false
     await loadTable()
     await loadMapData()
-  } catch {} finally { addLoading.value = false }
+  } catch { /* handled by interceptor */ } finally { addLoading.value = false }
 }
 
-// ── 刷新 ─────────────────────────────────────────────────────────────────────
-async function doRefresh(row) {
+// ── Refresh ──────────────────────────────────────────────────────────────────
+async function doRefresh(row: any) {
   try {
     await api.post(`/ip-data/refresh/${row.id}`)
-    ElMessage.success('刷新成功')
+    success('刷新成功')
     await loadTable()
     await loadMapData()
-  } catch {}
+  } catch { /* handled by interceptor */ }
 }
 
-// ── 删除 ─────────────────────────────────────────────────────────────────────
-async function doRemove(ids) {
-  await ElMessageBox.confirm(`确认删除 ${ids.length} 条 IP 记录？`, '确认', { type: 'warning' })
+// ── Remove ───────────────────────────────────────────────────────────────────
+async function doRemove(ids: number[]) {
+  const ok = await confirm(`确认删除 ${ids.length} 条 IP 记录？`, '确认', { type: 'warning' })
+  if (!ok) return
   try {
     await api.post('/ip-data/remove', { ids })
-    ElMessage.success('删除成功')
+    success('删除成功')
+    selectedIds.value = []
     await loadTable()
     await loadMapData()
-  } catch {}
+  } catch { /* handled by interceptor */ }
 }
 
-// ── 从 OCI 加载 ──────────────────────────────────────────────────────────────
+// ── Load from OCI ────────────────────────────────────────────────────────────
 const loadOciLoading = ref(false)
 
 async function doLoadFromOci() {
-  await ElMessageBox.confirm('将从所有 OCI 租户加载实例公网 IP 并查询归属地，确认继续？', '从 OCI 加载', { type: 'info' })
+  const ok = await confirm('将从所有 OCI 租户加载实例公网 IP 并查询归属地，确认继续？', '从 OCI 加载', { type: 'info' })
+  if (!ok) return
   loadOciLoading.value = true
   try {
     const res = await api.post('/ip-data/load-from-oci')
-    ElMessage.success(res.data.message)
-    setTimeout(async () => {
-      await loadTable()
-      await loadMapData()
-    }, 5000)
-  } catch {} finally { loadOciLoading.value = false }
+    success(res.data.message)
+    setTimeout(async () => { await loadTable(); await loadMapData() }, 5000)
+  } catch { /* handled by interceptor */ } finally { loadOciLoading.value = false }
 }
 
-// ── 初始化 ───────────────────────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await loadTable()
   await loadMapData()
@@ -310,10 +344,3 @@ onMounted(async () => {
   initMap()
 })
 </script>
-
-<style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.page-header h2 { margin: 0; }
-.header-actions { display: flex; gap: 8px; }
-.leaflet-map { width: 100%; height: 380px; border-radius: 8px; z-index: 0; }
-</style>

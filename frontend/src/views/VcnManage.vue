@@ -1,67 +1,79 @@
 <template>
-  <div>
-    <div class="page-header">
-      <div>
-        <el-button text @click="$router.back()"><el-icon><ArrowLeft /></el-icon> 返回</el-button>
-        <h2 style="display:inline;margin-left:8px">VCN 管理 — {{ tenantName }}</h2>
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center gap-3">
+      <button class="btn-ghost btn-sm" @click="$router.back()">← 返回</button>
+      <h2 class="text-2xl font-bold text-surface-900 dark:text-white">VCN 管理 — {{ tenantName }}</h2>
+    </div>
+
+    <!-- Region selector -->
+    <div class="card p-4">
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-surface-500 shrink-0">区域</span>
+        <select v-model="selectedRegion" class="select w-52" @change="loadVcns">
+          <option value="">选择区域</option>
+          <option v-for="r in regions" :key="r" :value="r">{{ r }}</option>
+        </select>
       </div>
     </div>
 
-    <el-card shadow="never" style="margin-bottom:16px">
-      <el-form :inline="true">
-        <el-form-item label="区域">
-          <el-select v-model="selectedRegion" placeholder="选择区域" @change="load" style="width:240px">
-            <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button @click="load" :loading="loading"><el-icon><Refresh /></el-icon> 刷新</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <el-card shadow="never" v-loading="loading">
-      <el-empty v-if="!loading && vcnList.length === 0" description="暂无 VCN" />
-      <el-table :data="vcnList" v-if="vcnList.length > 0" stripe border>
-        <el-table-column prop="display_name" label="名称" min-width="180" />
-        <el-table-column prop="cidr_block" label="CIDR" width="150" />
-        <el-table-column label="IPv6" width="120">
-          <template #default="{ row }">
-            <el-tag v-if="row.ipv6_cidr_blocks && row.ipv6_cidr_blocks.length" type="success" size="small">有</el-tag>
-            <el-tag v-else type="info" size="small">无</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="lifecycle_state" label="状态" width="110">
-          <template #default="{ row }">
-            <el-tag :type="row.lifecycle_state === 'AVAILABLE' ? 'success' : 'info'" size="small">
-              {{ row.lifecycle_state }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" text type="danger" @click="doDelete(row)">
-              <el-icon><Delete /></el-icon> 删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <!-- VCN Table -->
+    <div class="card overflow-hidden">
+      <Loading :loading="loading" text="加载 VCN 列表..." />
+      <div v-if="!loading && vcnList.length === 0" class="text-center text-surface-400 py-12">
+        {{ selectedRegion ? '该区域暂无 VCN 数据' : '请先选择区域' }}
+      </div>
+      <div v-if="!loading && vcnList.length > 0" class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>CIDR 块</th>
+              <th>IPv6</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="vcn in vcnList" :key="vcn.id">
+              <td class="font-medium">{{ vcn.display_name }}</td>
+              <td class="font-mono text-xs">{{ vcn.cidr_block || '-' }}</td>
+              <td>
+                <span v-if="vcn.ipv6_cidr_blocks && vcn.ipv6_cidr_blocks.length" class="badge-success">有</span>
+                <span v-else class="badge-neutral">无</span>
+              </td>
+              <td>
+                <span :class="vcn.lifecycle_state === 'AVAILABLE' ? 'badge-success' : 'badge-warning'">
+                  {{ vcn.lifecycle_state }}
+                </span>
+              </td>
+              <td>
+                <button class="btn-ghost btn-sm text-red-600 dark:text-red-400" @click="doDelete(vcn)">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
+import { useToast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
+import Loading from '@/components/Loading.vue'
 
 const route = useRoute()
-const tenantId = route.params.tenantId
+const { success } = useToast()
+const { confirm } = useModal()
+const tenantId = route.params.tenantId as string
 const tenantName = ref('')
-const regions = ref([])
+const regions = ref<string[]>([])
 const selectedRegion = ref('')
-const vcnList = ref([])
+const vcnList = ref<any[]>([])
 const loading = ref(false)
 
 async function loadTenant() {
@@ -70,37 +82,37 @@ async function loadTenant() {
   regions.value = res.data.region || []
   if (regions.value.length > 0) {
     selectedRegion.value = regions.value[0]
-    await load()
+    await loadVcns()
   }
 }
 
-async function load() {
+async function loadVcns() {
   if (!selectedRegion.value) return
   loading.value = true
   try {
     const res = await api.get(`/vcn/${tenantId}`, { params: { region: selectedRegion.value } })
     vcnList.value = res.data
-  } catch {} finally { loading.value = false }
+  } catch { /* handled by interceptor */ } finally {
+    loading.value = false
+  }
 }
 
-async function doDelete(row) {
-  await ElMessageBox.confirm(
+async function doDelete(row: any) {
+  const ok = await confirm(
     `确认删除 VCN「${row.display_name}」？将同时清理其下属子网、网关等资源。`,
-    '危险操作', { type: 'error' }
+    '危险操作',
+    { type: 'error', confirmText: '确认删除' }
   )
+  if (!ok) return
   try {
     await api.post(`/vcn/${tenantId}/delete`, {
       region: selectedRegion.value,
       vcn_ids: [row.id],
     })
-    ElMessage.success('VCN 删除指令已发送')
-    setTimeout(load, 3000)
-  } catch {}
+    success('VCN 删除指令已发送')
+    setTimeout(loadVcns, 3000)
+  } catch { /* handled by interceptor */ }
 }
 
 onMounted(loadTenant)
 </script>
-
-<style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-</style>

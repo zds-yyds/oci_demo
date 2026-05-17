@@ -1,257 +1,263 @@
 <template>
-  <div>
-    <div class="page-header">
-      <h2>云账户管理</h2>
-      <div class="header-actions">
-        <el-button type="primary" @click="openAdd">
-          <el-icon><Plus /></el-icon> 添加账户
-        </el-button>
-        <el-button type="success" @click="openExport">
-          <el-icon><Download /></el-icon> 导出
-        </el-button>
-        <el-button type="warning" @click="openImport">
-          <el-icon><Upload /></el-icon> 导入
-        </el-button>
+  <div class="space-y-6">
+    <!-- Page header -->
+    <div class="flex items-center justify-between">
+      <h2 class="text-2xl font-bold text-surface-900 dark:text-white">云账户管理</h2>
+      <div class="flex items-center gap-2">
+        <button class="btn-primary" @click="openAdd">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          添加账户
+        </button>
+        <button class="btn-secondary" @click="openExport">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+          导出
+        </button>
+        <button class="btn-secondary" @click="openImport">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M17 8l-5-5-5 5M12 3v12"/></svg>
+          导入
+        </button>
       </div>
     </div>
 
-    <!-- 搜索栏 -->
-    <div class="search-bar">
-      <el-input
-        v-model="searchQuery"
-        placeholder="搜索账户名称、Tenancy OCID..."
-        clearable
-        prefix-icon="Search"
-        style="width: 320px"
-      />
-      <el-select v-model="filterRegion" placeholder="按区域筛选" clearable style="width:180px">
-        <el-option v-for="r in allRegionsInUse" :key="r" :label="r" :value="r" />
-      </el-select>
-      <el-select v-model="filterStatus" placeholder="按状态筛选" clearable style="width:130px">
-        <el-option label="启用" value="active" />
-        <el-option label="禁用" value="inactive" />
-      </el-select>
-      <el-select v-model="sortBy" placeholder="排序" style="width:160px">
-        <el-option label="创建时间 ↓" value="created_desc" />
-        <el-option label="创建时间 ↑" value="created_asc" />
-        <el-option label="名称 A→Z" value="name_asc" />
-        <el-option label="名称 Z→A" value="name_desc" />
-        <el-option label="区域数量 ↓" value="region_desc" />
-        <el-option label="区域数量 ↑" value="region_asc" />
-      </el-select>
+    <!-- Search bar -->
+    <div class="flex items-center gap-3 flex-wrap">
+      <input v-model="searchQuery" class="input" style="width:300px" placeholder="搜索账户名称、Tenancy OCID..." />
+      <select v-model="filterRegion" class="select" style="width:180px">
+        <option value="">全部区域</option>
+        <option v-for="r in allRegionsInUse" :key="r" :value="r">{{ r }}</option>
+      </select>
+      <select v-model="filterStatus" class="select" style="width:130px">
+        <option value="">全部状态</option>
+        <option value="active">启用</option>
+        <option value="inactive">禁用</option>
+      </select>
+      <select v-model="sortBy" class="select" style="width:160px">
+        <option value="created_desc">创建时间 ↓</option>
+        <option value="created_asc">创建时间 ↑</option>
+        <option value="name_asc">名称 A→Z</option>
+        <option value="name_desc">名称 Z→A</option>
+        <option value="region_desc">区域数量 ↓</option>
+        <option value="region_asc">区域数量 ↑</option>
+      </select>
     </div>
 
-    <el-card shadow="never">
-      <el-table :data="filteredTenants" v-loading="loading">
-        <el-table-column prop="name" label="账户名称" />
-        <el-table-column prop="region" label="区域" width="200">
-          <template #default="{ row }">
-            <el-tag v-for="r in row.region" :key="r" size="small" style="margin:2px">{{ r }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="tenancy_ocid" label="Tenancy OCID" show-overflow-tooltip />
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
-              {{ row.is_active ? '启用' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="170">
-          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
-          <template #default="{ row }">
-            <div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap">
-              <el-button text size="small" @click="$router.push(`/instances/${row.id}`)">
-                <el-icon><Monitor /></el-icon> 实例
-              </el-button>
-              <el-button text size="small" @click="testConn(row)">
-                <el-icon><Connection /></el-icon> 测试
-              </el-button>
-              <el-button text size="small" @click="openEdit(row)">
-                <el-icon><Edit /></el-icon> 编辑
-              </el-button>
-              <el-dropdown trigger="click">
-                <el-button text size="small">
-                  更多 <el-icon><ArrowDown /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="router.push(`/security-rules/${row.id}`)"><el-icon><Lock /></el-icon> 安全列表</el-dropdown-item>
-                    <el-dropdown-item @click="router.push(`/traffic/${row.id}`)"><el-icon><TrendCharts /></el-icon> 流量统计</el-dropdown-item>
-                    <el-dropdown-item @click="router.push(`/boot-volumes/${row.id}`)"><el-icon><Box /></el-icon> 引导卷</el-dropdown-item>
-                    <el-dropdown-item @click="router.push(`/vcn/${row.id}`)"><el-icon><Share /></el-icon> VCN 管理</el-dropdown-item>
-                    <el-dropdown-item @click="router.push(`/limits/${row.id}`)"><el-icon><Histogram /></el-icon> 配额查询</el-dropdown-item>
-                    <el-dropdown-item @click="router.push(`/oci-users/${row.id}`)"><el-icon><User /></el-icon> OCI 用户</el-dropdown-item>
-                    <el-dropdown-item divided @click="deleteTenant(row)" style="color:#F56C6C"><el-icon><Delete /></el-icon> 删除账户</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <!-- Tenants table -->
+    <div class="card">
+      <Loading :loading="loading" text="加载中..." />
+      <div v-if="!loading" class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>账户名称</th>
+              <th>区域</th>
+              <th>Tenancy OCID</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in filteredTenants" :key="row.id">
+              <td class="font-medium">{{ row.name }}</td>
+              <td>
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="r in row.region" :key="r" class="badge-info">{{ r }}</span>
+                </div>
+              </td>
+              <td class="font-mono text-xs max-w-[200px] truncate" :title="row.tenancy_ocid">{{ row.tenancy_ocid }}</td>
+              <td>
+                <span :class="row.is_active ? 'badge-success' : 'badge-neutral'">
+                  {{ row.is_active ? '启用' : '禁用' }}
+                </span>
+              </td>
+              <td class="whitespace-nowrap">{{ formatDate(row.created_at) }}</td>
+              <td>
+                <div class="flex items-center gap-1">
+                  <button class="btn-ghost btn-sm" @click="$router.push(`/instances/${row.id}`)">实例</button>
+                  <button class="btn-ghost btn-sm" @click="testConn(row)">测试</button>
+                  <button class="btn-ghost btn-sm" @click="openEdit(row)">编辑</button>
+                  <div class="relative">
+                    <button class="btn-ghost btn-sm" @click="toggleDropdown($event, row.id)">更多 ▾</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="filteredTenants.length === 0 && !loading">
+              <td colspan="6" class="text-center text-surface-400 py-8">暂无账户数据</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-    <!-- Add/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="editId ? '编辑账户' : '添加云账户'" width="600px">
-      <!-- 导入区域：仅在添加模式下显示 -->
-      <div v-if="!editId" class="import-section">
-        <el-divider content-position="left">快速导入 OCI Config</el-divider>
-        <div class="import-actions">
-          <el-button size="small" @click="showPasteArea = !showPasteArea">
-            <el-icon><DocumentCopy /></el-icon> 粘贴配置
-          </el-button>
-          <el-upload
-            :show-file-list="false"
-            :before-upload="handleFileUpload"
-            accept=".conf,.config,.pem,.txt,*"
-          >
-            <el-button size="small">
-              <el-icon><Upload /></el-icon> 上传配置文件
-            </el-button>
-          </el-upload>
+    <!-- Dropdown menu (teleported to avoid overflow clipping) -->
+    <Teleport to="body">
+      <div v-if="openDropdownId !== null" class="fixed inset-0 z-[8000]" @click="openDropdownId = null">
+        <div class="fixed w-44 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg shadow-lg py-1" :style="dropdownStyle" @click.stop>
+          <button class="dropdown-item" @click="navigateTo(`/security-rules/${openDropdownId}`)">安全列表</button>
+          <button class="dropdown-item" @click="navigateTo(`/traffic/${openDropdownId}`)">流量统计</button>
+          <button class="dropdown-item" @click="navigateTo(`/boot-volumes/${openDropdownId}`)">引导卷</button>
+          <button class="dropdown-item" @click="navigateTo(`/vcn/${openDropdownId}`)">VCN 管理</button>
+          <button class="dropdown-item" @click="navigateTo(`/limits/${openDropdownId}`)">配额查询</button>
+          <button class="dropdown-item" @click="navigateTo(`/oci-users/${openDropdownId}`)">OCI 用户</button>
+          <hr class="my-1 border-surface-200 dark:border-surface-700" />
+          <button class="dropdown-item text-red-600 dark:text-red-400" @click="deleteTenantById(openDropdownId!)">删除账户</button>
         </div>
-        <div v-if="showPasteArea" class="paste-area">
-          <el-input
-            v-model="pasteContent"
-            type="textarea"
-            :rows="6"
-            placeholder="粘贴 OCI config 内容，例如：
+      </div>
+    </Teleport>
+
+    <!-- Add/Edit Modal -->
+    <Modal :visible="dialogVisible" :title="editId ? '编辑账户' : '添加云账户'" width="600px" @close="dialogVisible = false">
+      <!-- OCI Config import (only in add mode) -->
+      <div v-if="!editId" class="mb-4">
+        <p class="text-sm font-medium text-surface-600 dark:text-surface-400 mb-2">快速导入 OCI Config</p>
+        <div class="flex items-center gap-3 mb-2">
+          <button class="btn-secondary btn-sm" @click="showPasteArea = !showPasteArea">粘贴配置</button>
+          <label class="btn-secondary btn-sm cursor-pointer">
+            上传配置文件
+            <input type="file" class="hidden" accept=".conf,.config,.pem,.txt,*" @change="handleFileUpload" />
+          </label>
+        </div>
+        <div v-if="showPasteArea" class="space-y-2">
+          <textarea v-model="pasteContent" class="input" rows="5" placeholder="粘贴 OCI config 内容，例如：
 [DEFAULT]
 user=ocid1.user.oc1..xxx
 fingerprint=xx:xx:xx:...
 tenancy=ocid1.tenancy.oc1..xxx
 region=ap-singapore-1
-key_file=xxx.pem"
-          />
-          <el-button type="primary" size="small" style="margin-top:8px" @click="parseAndFill">
-            识别并填入表单
-          </el-button>
+key_file=xxx.pem"></textarea>
+          <button class="btn-primary btn-sm" @click="parseAndFill">识别并填入表单</button>
         </div>
       </div>
 
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="120px" style="margin-top:16px">
-        <el-form-item label="账户名称" prop="name">
-          <el-input v-model="form.name" placeholder="自定义名称，如：我的OCI账户" />
-        </el-form-item>
-        <el-form-item label="User OCID" prop="user_ocid">
-          <el-input v-model="form.user_ocid" placeholder="ocid1.user.oc1.." />
-        </el-form-item>
-        <el-form-item label="Fingerprint" prop="fingerprint">
-          <el-input v-model="form.fingerprint" placeholder="xx:xx:xx:..." />
-        </el-form-item>
-        <el-form-item label="Tenancy OCID" prop="tenancy_ocid">
-          <el-input v-model="form.tenancy_ocid" placeholder="ocid1.tenancy.oc1.." />
-        </el-form-item>
-        <el-form-item label="Region" prop="region">
-          <el-select v-model="form.region" placeholder="选择区域（可多选）" filterable multiple collapse-tags collapse-tags-tooltip style="width:100%">
-            <el-option v-for="r in regions" :key="r" :label="r" :value="r" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="私钥 (PEM)" prop="private_key">
-          <el-input
-            v-model="form.private_key"
-            type="textarea"
-            :rows="6"
-            placeholder="留空表示使用个人设置中的默认私钥"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
-      </template>
-    </el-dialog>
+      <div class="space-y-4">
+        <div>
+          <label class="label">账户名称 <span class="text-red-500">*</span></label>
+          <input v-model="form.name" class="input" placeholder="自定义名称，如：我的OCI账户" />
+        </div>
+        <div>
+          <label class="label">User OCID <span class="text-red-500">*</span></label>
+          <input v-model="form.user_ocid" class="input" placeholder="ocid1.user.oc1.." />
+        </div>
+        <div>
+          <label class="label">Fingerprint <span class="text-red-500">*</span></label>
+          <input v-model="form.fingerprint" class="input" placeholder="xx:xx:xx:..." />
+        </div>
+        <div>
+          <label class="label">Tenancy OCID <span class="text-red-500">*</span></label>
+          <input v-model="form.tenancy_ocid" class="input" placeholder="ocid1.tenancy.oc1.." />
+        </div>
+        <div>
+          <label class="label">Region <span class="text-red-500">*</span></label>
+          <div class="flex flex-wrap gap-2 p-2 border border-surface-300 dark:border-surface-600 rounded-lg min-h-[40px]">
+            <span v-for="r in form.region" :key="r" class="badge-info flex items-center gap-1">
+              {{ r }}
+              <button @click="removeRegion(r)" class="hover:text-red-500">&times;</button>
+            </span>
+          </div>
+          <select class="select mt-2" @change="addRegion($event)">
+            <option value="">选择区域添加...</option>
+            <option v-for="r in availableRegions" :key="r" :value="r">{{ r }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">私钥 (PEM)</label>
+          <textarea v-model="form.private_key" class="input" rows="5" placeholder="留空表示使用个人设置中的默认私钥"></textarea>
+        </div>
+      </div>
 
-    <!-- Export Dialog -->
-    <el-dialog v-model="exportDialogVisible" title="加密导出" width="440px">
-      <el-alert
-        type="warning"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 16px"
-      >
-        <template #title>导出文件包含私钥等敏感信息，将使用 AES-256-GCM 加密保护。请牢记密码，丢失后无法恢复。</template>
-      </el-alert>
-      <el-form :model="exportForm" :rules="exportRules" ref="exportFormRef" label-width="100px">
-        <el-form-item label="加密密码" prop="password">
-          <el-input v-model="exportForm.password" type="password" show-password placeholder="至少 6 个字符" />
-        </el-form-item>
-        <el-form-item label="确认密码" prop="confirmPassword">
-          <el-input v-model="exportForm.confirmPassword" type="password" show-password placeholder="再次输入密码" />
-        </el-form-item>
-      </el-form>
       <template #footer>
-        <el-button @click="exportDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="exporting" @click="doExport">确认导出</el-button>
+        <button class="btn-secondary" @click="dialogVisible = false">取消</button>
+        <button class="btn-primary" :disabled="saving" @click="save">
+          {{ saving ? '保存中...' : '保存' }}
+        </button>
       </template>
-    </el-dialog>
+    </Modal>
 
-    <!-- Import Dialog -->
-    <el-dialog v-model="importDialogVisible" title="导入备份" width="440px">
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 16px"
-      >
-        <template #title>选择 .enc 备份文件并输入导出时设置的密码。已存在的账户（相同 Tenancy OCID）将被跳过。</template>
-      </el-alert>
-      <el-form :model="importForm" :rules="importRules" ref="importFormRef" label-width="100px">
-        <el-form-item label="备份文件" prop="file">
-          <el-upload
-            :show-file-list="true"
-            :auto-upload="false"
-            :limit="1"
-            accept=".enc"
-            :on-change="handleImportFile"
-            :on-remove="() => importForm.file = null"
-          >
-            <el-button size="small"><el-icon><Upload /></el-icon> 选择文件</el-button>
-          </el-upload>
-        </el-form-item>
-        <el-form-item label="解密密码" prop="password">
-          <el-input v-model="importForm.password" type="password" show-password placeholder="输入导出时设置的密码" />
-        </el-form-item>
-      </el-form>
+    <!-- Export Modal -->
+    <Modal :visible="exportDialogVisible" title="加密导出" width="440px" @close="exportDialogVisible = false">
+      <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4 text-sm text-amber-800 dark:text-amber-300">
+        导出文件包含私钥等敏感信息，将使用 AES-256-GCM 加密保护。请牢记密码，丢失后无法恢复。
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="label">加密密码</label>
+          <input v-model="exportForm.password" type="password" class="input" placeholder="至少 6 个字符" />
+        </div>
+        <div>
+          <label class="label">确认密码</label>
+          <input v-model="exportForm.confirmPassword" type="password" class="input" placeholder="再次输入密码" />
+        </div>
+      </div>
       <template #footer>
-        <el-button @click="importDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="importing" @click="doImport">确认导入</el-button>
+        <button class="btn-secondary" @click="exportDialogVisible = false">取消</button>
+        <button class="btn-primary" :disabled="exporting" @click="doExport">
+          {{ exporting ? '导出中...' : '确认导出' }}
+        </button>
       </template>
-    </el-dialog>
+    </Modal>
+
+    <!-- Import Modal -->
+    <Modal :visible="importDialogVisible" title="导入备份" width="440px" @close="importDialogVisible = false">
+      <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4 text-sm text-blue-800 dark:text-blue-300">
+        选择 .enc 备份文件并输入导出时设置的密码。已存在的账户（相同 Tenancy OCID）将被跳过。
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="label">备份文件</label>
+          <input type="file" accept=".enc" class="input" @change="handleImportFile" />
+        </div>
+        <div>
+          <label class="label">解密密码</label>
+          <input v-model="importForm.password" type="password" class="input" placeholder="输入导出时设置的密码" />
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn-secondary" @click="importDialogVisible = false">取消</button>
+        <button class="btn-primary" :disabled="importing" @click="doImport">
+          {{ importing ? '导入中...' : '确认导入' }}
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
-<script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
-
-const router = useRouter()
+import { useToast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
+import Modal from '@/components/Modal.vue'
+import Loading from '@/components/Loading.vue'
+import type { Tenant } from '@/types'
 import dayjs from 'dayjs'
 
-const tenants = ref([])
+const router = useRouter()
+const { success, warning, error } = useToast()
+const { confirm } = useModal()
+
+const tenants = ref<Tenant[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const saving = ref(false)
-const editId = ref(null)
-const formRef = ref()
+const editId = ref<number | null>(null)
 
-const regions = ref([])
+const regions = ref<string[]>([])
 const showPasteArea = ref(false)
 const pasteContent = ref('')
 
-// ── 搜索 ────────────────────────────────────────────────────────────────────
+// ── Search & Filter ──────────────────────────────────────────────────────────
 const searchQuery = ref('')
 const filterRegion = ref('')
 const filterStatus = ref('')
-const sortBy = ref('created_desc')
+const sortBy = ref(localStorage.getItem('tenants_sort') || 'created_desc')
+
+// Persist sort preference
+watch(sortBy, (val) => localStorage.setItem('tenants_sort', val))
 
 const allRegionsInUse = computed(() => {
-  const regionSet = new Set()
+  const regionSet = new Set<string>()
   for (const t of tenants.value) {
     for (const r of (t.region || [])) {
       regionSet.add(r)
@@ -263,7 +269,6 @@ const allRegionsInUse = computed(() => {
 const filteredTenants = computed(() => {
   let list = tenants.value
 
-  // 搜索
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(t =>
@@ -274,24 +279,21 @@ const filteredTenants = computed(() => {
     )
   }
 
-  // 区域筛选
   if (filterRegion.value) {
     list = list.filter(t => (t.region || []).includes(filterRegion.value))
   }
 
-  // 状态筛选
   if (filterStatus.value) {
     list = list.filter(t => filterStatus.value === 'active' ? t.is_active : !t.is_active)
   }
 
-  // 排序
   list = [...list]
   switch (sortBy.value) {
     case 'created_desc':
-      list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       break
     case 'created_asc':
-      list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       break
     case 'name_asc':
       list.sort((a, b) => a.name.localeCompare(b.name))
@@ -310,27 +312,38 @@ const filteredTenants = computed(() => {
   return list
 })
 
-// ── 导出 ────────────────────────────────────────────────────────────────────
+// ── Dropdown ─────────────────────────────────────────────────────────────────
+const openDropdownId = ref<number | null>(null)
+const dropdownStyle = ref({ top: '0px', left: '0px' })
+
+function toggleDropdown(event: MouseEvent, id: number) {
+  if (openDropdownId.value === id) {
+    openDropdownId.value = null
+    return
+  }
+  const btn = event.currentTarget as HTMLElement
+  const rect = btn.getBoundingClientRect()
+  dropdownStyle.value = {
+    top: `${rect.bottom + 4}px`,
+    left: `${rect.right - 176}px`, // 176 = w-44 = 11rem
+  }
+  openDropdownId.value = id
+}
+
+function navigateTo(path: string) {
+  openDropdownId.value = null
+  router.push(path)
+}
+
+onMounted(() => {
+  load()
+  loadRegions()
+})
+
+// ── Export ───────────────────────────────────────────────────────────────────
 const exportDialogVisible = ref(false)
 const exporting = ref(false)
-const exportFormRef = ref()
 const exportForm = reactive({ password: '', confirmPassword: '' })
-
-const exportRules = {
-  password: [
-    { required: true, message: '请输入加密密码' },
-    { min: 6, message: '密码至少 6 个字符' },
-  ],
-  confirmPassword: [
-    { required: true, message: '请确认密码' },
-    {
-      validator: (rule, value, callback) => {
-        if (value !== exportForm.password) callback(new Error('两次密码不一致'))
-        else callback()
-      },
-    },
-  ],
-}
 
 function openExport() {
   exportForm.password = ''
@@ -339,11 +352,11 @@ function openExport() {
 }
 
 async function doExport() {
-  await exportFormRef.value.validate()
+  if (exportForm.password.length < 6) { warning('密码至少 6 个字符'); return }
+  if (exportForm.password !== exportForm.confirmPassword) { warning('两次密码不一致'); return }
   exporting.value = true
   try {
     const res = await api.post('/tenants/export', { password: exportForm.password }, { responseType: 'blob' })
-    // 下载文件
     const blob = new Blob([res.data], { type: 'application/octet-stream' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -353,23 +366,17 @@ async function doExport() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-    ElMessage.success('导出成功，请妥善保管备份文件和密码')
+    success('导出成功，请妥善保管备份文件和密码')
     exportDialogVisible.value = false
   } finally {
     exporting.value = false
   }
 }
 
-// ── 导入 ────────────────────────────────────────────────────────────────────
+// ── Import ───────────────────────────────────────────────────────────────────
 const importDialogVisible = ref(false)
 const importing = ref(false)
-const importFormRef = ref()
-const importForm = reactive({ password: '', file: null })
-
-const importRules = {
-  password: [{ required: true, message: '请输入解密密码' }],
-  file: [{ required: true, message: '请选择备份文件' }],
-}
+const importForm = reactive({ password: '', file: null as File | null })
 
 function openImport() {
   importForm.password = ''
@@ -377,19 +384,16 @@ function openImport() {
   importDialogVisible.value = true
 }
 
-function handleImportFile(uploadFile) {
-  importForm.file = uploadFile.raw
+function handleImportFile(e: Event) {
+  const target = e.target as HTMLInputElement
+  importForm.file = target.files?.[0] || null
 }
 
 async function doImport() {
-  await importFormRef.value.validate()
-  if (!importForm.file) {
-    ElMessage.warning('请选择备份文件')
-    return
-  }
+  if (!importForm.file) { warning('请选择备份文件'); return }
+  if (!importForm.password) { warning('请输入解密密码'); return }
   importing.value = true
   try {
-    // 读取文件内容并 base64 编码
     const fileContent = await readFileAsBase64(importForm.file)
     const res = await api.post('/tenants/import', {
       password: importForm.password,
@@ -400,7 +404,7 @@ async function doImport() {
     if (skipped > 0) {
       msg += `，跳过 ${skipped} 个（${skipped_names.join('、')}）`
     }
-    ElMessage.success(msg)
+    success(msg)
     importDialogVisible.value = false
     load()
   } finally {
@@ -408,12 +412,11 @@ async function doImport() {
   }
 }
 
-function readFileAsBase64(file) {
+function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
-      // result 是 data:xxx;base64,XXXX 格式，取逗号后面的部分
-      const base64 = reader.result.split(',')[1]
+      const base64 = (reader.result as string).split(',')[1]
       resolve(base64)
     }
     reader.onerror = reject
@@ -421,26 +424,29 @@ function readFileAsBase64(file) {
   })
 }
 
-// ── 表单 ────────────────────────────────────────────────────────────────────
+// ── Form ─────────────────────────────────────────────────────────────────────
 const form = reactive({
-  name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: [], private_key: '',
+  name: '', user_ocid: '', fingerprint: '', tenancy_ocid: '', region: [] as string[], private_key: '',
 })
 
-const rules = {
-  name: [{ required: true, message: '请输入账户名称' }],
-  user_ocid: [{ required: true, message: '请输入 User OCID' }],
-  fingerprint: [{ required: true, message: '请输入 Fingerprint' }],
-  tenancy_ocid: [{ required: true, message: '请输入 Tenancy OCID' }],
-  region: [{ required: true, type: 'array', min: 1, message: '请至少选择一个区域' }],
+const availableRegions = computed(() => regions.value.filter(r => !form.region.includes(r)))
+
+function addRegion(e: Event) {
+  const val = (e.target as HTMLSelectElement).value
+  if (val && !form.region.includes(val)) {
+    form.region.push(val)
+  }
+  ;(e.target as HTMLSelectElement).value = ''
 }
 
-function formatDate(d) { return dayjs(d).format('YYYY-MM-DD HH:mm') }
+function removeRegion(r: string) {
+  form.region = form.region.filter(x => x !== r)
+}
 
-/**
- * 解析 OCI config 格式的文本内容
- */
-function parseOciConfig(text) {
-  const result = {}
+function formatDate(d: string) { return dayjs(d).format('YYYY-MM-DD HH:mm') }
+
+function parseOciConfig(text: string) {
+  const result: Record<string, string> = {}
   const lines = text.split(/\r?\n/)
   for (const line of lines) {
     const trimmed = line.trim()
@@ -449,57 +455,54 @@ function parseOciConfig(text) {
     if (eqIndex === -1) continue
     const key = trimmed.substring(0, eqIndex).trim().toLowerCase()
     const value = trimmed.substring(eqIndex + 1).trim()
-    if (!value) continue
-    if (key === 'key_file') continue
+    if (!value || key === 'key_file') continue
     result[key] = value
   }
   return result
 }
 
-function fillFormFromConfig(parsed) {
+function fillFormFromConfig(parsed: Record<string, string>) {
   let filled = 0
   if (parsed.user) { form.user_ocid = parsed.user; filled++ }
   if (parsed.fingerprint) { form.fingerprint = parsed.fingerprint; filled++ }
   if (parsed.tenancy) { form.tenancy_ocid = parsed.tenancy; filled++ }
   if (parsed.region) {
-    const regionVal = parsed.region
-    if (!form.region.includes(regionVal)) form.region = [regionVal]
+    if (!form.region.includes(parsed.region)) form.region = [parsed.region]
     filled++
   }
   return filled
 }
 
 function parseAndFill() {
-  if (!pasteContent.value.trim()) {
-    ElMessage.warning('请先粘贴配置内容')
-    return
-  }
+  if (!pasteContent.value.trim()) { warning('请先粘贴配置内容'); return }
   const parsed = parseOciConfig(pasteContent.value)
   const filled = fillFormFromConfig(parsed)
   if (filled === 0) {
-    ElMessage.error('未能识别有效的配置项，请检查格式')
+    error('未能识别有效的配置项，请检查格式')
   } else {
-    ElMessage.success(`已识别并填入 ${filled} 项配置，请检查后保存`)
+    success(`已识别并填入 ${filled} 项配置，请检查后保存`)
     showPasteArea.value = false
     pasteContent.value = ''
   }
 }
 
-function handleFileUpload(file) {
+function handleFileUpload(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
   const reader = new FileReader()
-  reader.onload = (e) => {
-    const content = e.target.result
+  reader.onload = (ev) => {
+    const content = ev.target?.result as string
     const parsed = parseOciConfig(content)
     const filled = fillFormFromConfig(parsed)
     if (filled === 0) {
-      ElMessage.error('文件中未能识别有效的配置项，请检查文件格式')
+      error('文件中未能识别有效的配置项，请检查文件格式')
     } else {
-      ElMessage.success(`已从文件识别并填入 ${filled} 项配置，请检查后保存`)
+      success(`已从文件识别并填入 ${filled} 项配置，请检查后保存`)
     }
   }
-  reader.onerror = () => { ElMessage.error('文件读取失败') }
+  reader.onerror = () => { error('文件读取失败') }
   reader.readAsText(file)
-  return false
 }
 
 async function load() {
@@ -520,31 +523,36 @@ function openAdd() {
   dialogVisible.value = true
 }
 
-function openEdit(row) {
+function openEdit(row: Tenant) {
   editId.value = row.id
   Object.assign(form, {
     name: row.name,
     user_ocid: row.user_ocid || '',
     fingerprint: row.fingerprint || '',
     tenancy_ocid: row.tenancy_ocid,
-    region: row.region || [],
+    region: [...(row.region || [])],
     private_key: '',
   })
   dialogVisible.value = true
 }
 
 async function save() {
-  await formRef.value.validate()
+  if (!form.name) { warning('请输入账户名称'); return }
+  if (!form.user_ocid) { warning('请输入 User OCID'); return }
+  if (!form.fingerprint) { warning('请输入 Fingerprint'); return }
+  if (!form.tenancy_ocid) { warning('请输入 Tenancy OCID'); return }
+  if (form.region.length === 0) { warning('请至少选择一个区域'); return }
+
   saving.value = true
   try {
-    const payload = { ...form }
+    const payload: any = { ...form }
     if (!payload.private_key) delete payload.private_key
     if (editId.value) {
       await api.put(`/tenants/${editId.value}`, payload)
-      ElMessage.success('更新成功')
+      success('更新成功')
     } else {
       await api.post('/tenants', payload)
-      ElMessage.success('添加成功')
+      success('添加成功')
     }
     dialogVisible.value = false
     load()
@@ -553,55 +561,49 @@ async function save() {
   }
 }
 
-async function deleteTenant(row) {
-  await ElMessageBox.confirm(`确认删除账户「${row.name}」？`, '警告', { type: 'warning' })
+async function deleteTenant(row: Tenant) {
+  openDropdownId.value = null
+  const ok = await confirm(`确认删除账户「${row.name}」？`, '警告', { type: 'warning' })
+  if (!ok) return
   await api.delete(`/tenants/${row.id}`)
-  ElMessage.success('删除成功')
+  success('删除成功')
   load()
 }
 
+async function deleteTenantById(id: number) {
+  const row = tenants.value.find(t => t.id === id)
+  if (row) await deleteTenant(row)
+}
 
-
-async function testConn(row) {
-  const loading = ElMessage({ message: '正在测试连接（遍历所有区域）...', type: 'info', duration: 0 })
+async function testConn(row: Tenant) {
+  const { info } = useToast()
+  info('正在测试连接（遍历所有区域）...')
   try {
     const res = await api.get(`/tenants/${row.id}/test`)
-    loading.close()
     if (res.data.status === 'ok') {
       const regionResults = res.data.regions || {}
       const details = Object.entries(regionResults)
         .map(([r, s]) => `${r}: ${s === 'ok' ? '✓' : '✗'}`)
-        .join('\n')
-      ElMessage.success({ message: `连接成功！租户: ${res.data.tenancy_name}\n${details}`, duration: 5000 })
+        .join(', ')
+      success(`连接成功！租户: ${res.data.tenancy_name} | ${details}`)
     } else {
-      ElMessage.error(`连接失败: ${res.data.detail}`)
+      error(`连接失败: ${res.data.detail}`)
     }
-  } catch {
-    loading.close()
-  }
+  } catch { /* handled by interceptor */ }
 }
 
 async function loadRegions() {
   try {
     const res = await api.get('/regions')
-    regions.value = res.data.map(r => r.identifier)
+    regions.value = res.data.map((r: any) => r.identifier)
   } catch {
     regions.value = []
   }
 }
-
-onMounted(() => {
-  load()
-  loadRegions()
-})
 </script>
 
 <style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.page-header h2 { font-size: 22px; margin: 0; }
-.header-actions { display: flex; gap: 8px; }
-.search-bar { margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.import-section { margin-bottom: 8px; }
-.import-actions { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
-.paste-area { margin-top: 8px; }
+.dropdown-item {
+  @apply w-full text-left px-3 py-2 text-sm text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors;
+}
 </style>

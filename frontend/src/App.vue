@@ -1,11 +1,14 @@
 <template>
   <router-view />
+  <Toast />
+  <ConfirmModal />
 </template>
 
-<script setup>
-</script>
+<script setup lang="ts">
+import Toast from '@/components/Toast.vue'
+import ConfirmModal from '@/components/ConfirmModal.vue'
+import { useThemeStore } from '@/stores/theme'
 
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; }
-</style>
+// Initialize theme
+useThemeStore()
+</script>

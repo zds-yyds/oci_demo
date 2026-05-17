@@ -1,159 +1,190 @@
 <template>
-  <div>
-    <div class="page-header">
-      <h2>Cloudflare DNS 管理</h2>
-      <el-button type="primary" @click="openAddCfg">
-        <el-icon><Plus /></el-icon> 添加配置
-      </el-button>
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <h2 class="text-2xl font-bold text-surface-900 dark:text-white">Cloudflare DNS 管理</h2>
+      <button class="btn-primary" @click="openAddCfg">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+        添加配置
+      </button>
     </div>
 
-    <!-- CF 配置选择 -->
-    <el-card shadow="never" style="margin-bottom:16px">
-      <el-form :inline="true">
-        <el-form-item label="CF 配置">
-          <el-select v-model="selectedCfgId" placeholder="选择 Cloudflare 配置" style="width:280px" @change="onCfgChange">
-            <el-option v-for="c in configs" :key="c.id" :label="`${c.name} (${c.domain || c.zone_id})`" :value="c.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="selectedCfgId">
-          <el-button size="small" @click="openEditCfg"><el-icon><Edit /></el-icon> 编辑</el-button>
-          <el-button size="small" type="danger" plain @click="doDeleteCfg"><el-icon><Delete /></el-icon> 删除</el-button>
-        </el-form-item>
-        <el-form-item v-if="selectedCfgId" style="margin-left:auto">
-          <el-select v-model="filterType" placeholder="类型筛选" clearable style="width:120px" @change="loadRecords">
-            <el-option label="A" value="A" />
-            <el-option label="AAAA" value="AAAA" />
-            <el-option label="CNAME" value="CNAME" />
-            <el-option label="MX" value="MX" />
-            <el-option label="TXT" value="TXT" />
-            <el-option label="NS" value="NS" />
-            <el-option label="SRV" value="SRV" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="selectedCfgId">
-          <el-button type="primary" @click="openAddRecord"><el-icon><Plus /></el-icon> 添加记录</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <!-- Config selector -->
+    <div class="card p-5">
+      <div class="flex items-center gap-4 flex-wrap">
+        <div>
+          <label class="label">CF 配置</label>
+          <select v-model="selectedCfgId" class="select w-72" @change="onCfgChange">
+            <option :value="null" disabled>选择 Cloudflare 配置</option>
+            <option v-for="c in configs" :key="c.id" :value="c.id">{{ c.name }} ({{ c.domain || c.zone_id }})</option>
+          </select>
+        </div>
+        <div v-if="selectedCfgId" class="flex items-center gap-2 pt-5">
+          <button class="btn-ghost btn-sm" @click="openEditCfg">编辑</button>
+          <button class="btn-ghost btn-sm text-red-600 dark:text-red-400" @click="doDeleteCfg">删除</button>
+        </div>
+        <div class="flex-1"></div>
+        <div v-if="selectedCfgId" class="flex items-center gap-3 pt-5">
+          <select v-model="filterType" class="select w-32" @change="loadRecords">
+            <option value="">全部类型</option>
+            <option value="A">A</option>
+            <option value="AAAA">AAAA</option>
+            <option value="CNAME">CNAME</option>
+            <option value="MX">MX</option>
+            <option value="TXT">TXT</option>
+            <option value="NS">NS</option>
+            <option value="SRV">SRV</option>
+          </select>
+          <button class="btn-primary btn-sm" @click="openAddRecord">添加记录</button>
+        </div>
+      </div>
+    </div>
 
-    <!-- DNS 记录列表 -->
-    <el-card shadow="never" v-if="selectedCfgId" v-loading="recordsLoading">
-      <el-empty v-if="!recordsLoading && records.length === 0" description="暂无 DNS 记录" />
-      <el-table :data="records" v-if="records.length > 0" stripe>
-        <el-table-column prop="type" label="类型" width="80" />
-        <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="content" label="内容" min-width="200" show-overflow-tooltip />
-        <el-table-column label="代理" width="70" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.proxied ? 'warning' : 'info'" size="small">
-              {{ row.proxied ? '开' : '关' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="TTL" width="80">
-          <template #default="{ row }">{{ row.ttl === 1 ? 'Auto' : row.ttl }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
-          <template #default="{ row }">
-            <el-button text size="small" @click="openEditRecord(row)">编辑</el-button>
-            <el-button text size="small" type="danger" @click="doDeleteRecord(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div v-if="totalRecords > 0" style="margin-top:12px;color:#909399;font-size:13px">
+    <!-- DNS Records -->
+    <div v-if="selectedCfgId" class="card">
+      <Loading :loading="recordsLoading" />
+      <div v-if="!recordsLoading && records.length === 0" class="p-12 text-center text-surface-400">暂无 DNS 记录</div>
+      <div v-if="records.length > 0" class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>类型</th>
+              <th>名称</th>
+              <th>内容</th>
+              <th>代理</th>
+              <th>TTL</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in records" :key="r.id">
+              <td><span class="badge-info">{{ r.type }}</span></td>
+              <td class="font-mono text-xs">{{ r.name }}</td>
+              <td class="font-mono text-xs max-w-[200px] truncate">{{ r.content }}</td>
+              <td><span :class="r.proxied ? 'badge-warning' : 'badge-neutral'">{{ r.proxied ? '开' : '关' }}</span></td>
+              <td>{{ r.ttl === 1 ? 'Auto' : r.ttl }}</td>
+              <td>
+                <div class="flex items-center gap-1">
+                  <button class="btn-ghost btn-sm" @click="openEditRecord(r)">编辑</button>
+                  <button class="btn-ghost btn-sm text-red-600 dark:text-red-400" @click="doDeleteRecord(r)">删除</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="totalRecords > 0" class="px-5 py-3 text-sm text-surface-400 border-t border-surface-100 dark:border-surface-700">
         共 {{ totalRecords }} 条记录
       </div>
-    </el-card>
+    </div>
 
-    <!-- 添加/编辑 CF 配置弹窗 -->
-    <el-dialog v-model="cfgDialogVisible" :title="editCfgId ? '编辑 CF 配置' : '添加 CF 配置'" width="500px">
-      <el-form :model="cfgForm" :rules="cfgRules" ref="cfgFormRef" label-width="110px">
-        <el-form-item label="名称" prop="name">
-          <el-input v-model="cfgForm.name" placeholder="自定义名称，如：我的域名" />
-        </el-form-item>
-        <el-form-item label="API Token" prop="api_token">
-          <el-input v-model="cfgForm.api_token" placeholder="Cloudflare API Token" show-password />
-        </el-form-item>
-        <el-form-item label="Zone ID" prop="zone_id">
-          <el-input v-model="cfgForm.zone_id" placeholder="在 CF 域名概览页底部可找到" />
-        </el-form-item>
-        <el-form-item label="域名">
-          <el-input v-model="cfgForm.domain" placeholder="可选，如 example.com（会自动获取）" />
-        </el-form-item>
-      </el-form>
+    <!-- CF Config Dialog -->
+    <Modal :visible="cfgDialogVisible" :title="editCfgId ? '编辑 CF 配置' : '添加 CF 配置'" width="500px" @close="cfgDialogVisible = false">
+      <form class="space-y-4" @submit.prevent="saveCfg">
+        <div>
+          <label class="label">名称</label>
+          <input v-model="cfgForm.name" class="input" placeholder="自定义名称" required />
+        </div>
+        <div>
+          <label class="label">API Token</label>
+          <input v-model="cfgForm.api_token" type="password" class="input" placeholder="Cloudflare API Token" :required="!editCfgId" />
+        </div>
+        <div>
+          <label class="label">Zone ID</label>
+          <input v-model="cfgForm.zone_id" class="input" placeholder="在 CF 域名概览页底部可找到" required />
+        </div>
+        <div>
+          <label class="label">域名（可选）</label>
+          <input v-model="cfgForm.domain" class="input" placeholder="如 example.com（会自动获取）" />
+        </div>
+      </form>
       <template #footer>
-        <el-button @click="cfgDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="cfgSaving" @click="saveCfg">保存</el-button>
+        <button class="btn-secondary" @click="cfgDialogVisible = false">取消</button>
+        <button class="btn-primary" :disabled="cfgSaving" @click="saveCfg">保存</button>
       </template>
-    </el-dialog>
+    </Modal>
 
-    <!-- 添加/编辑 DNS 记录弹窗 -->
-    <el-dialog v-model="recordDialogVisible" :title="editRecordId ? '编辑 DNS 记录' : '添加 DNS 记录'" width="520px">
-      <el-form :model="recordForm" :rules="recordRules" ref="recordFormRef" label-width="100px">
-        <el-form-item label="类型" prop="type">
-          <el-select v-model="recordForm.type" style="width:100%">
-            <el-option label="A (IPv4)" value="A" />
-            <el-option label="AAAA (IPv6)" value="AAAA" />
-            <el-option label="CNAME" value="CNAME" />
-            <el-option label="MX" value="MX" />
-            <el-option label="TXT" value="TXT" />
-            <el-option label="NS" value="NS" />
-            <el-option label="SRV" value="SRV" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="名称" prop="name">
-          <el-input v-model="recordForm.name" placeholder="如 www 或 @ 表示根域名" />
-        </el-form-item>
-        <el-form-item label="内容" prop="content">
-          <el-input v-model="recordForm.content" placeholder="如 IP 地址或目标域名" />
-        </el-form-item>
-        <el-form-item label="TTL">
-          <el-select v-model="recordForm.ttl" style="width:100%">
-            <el-option label="Auto" :value="1" />
-            <el-option label="1 分钟" :value="60" />
-            <el-option label="5 分钟" :value="300" />
-            <el-option label="30 分钟" :value="1800" />
-            <el-option label="1 小时" :value="3600" />
-            <el-option label="1 天" :value="86400" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="代理">
-          <el-switch v-model="recordForm.proxied" active-text="开启" inactive-text="关闭" />
-        </el-form-item>
-      </el-form>
+    <!-- DNS Record Dialog -->
+    <Modal :visible="recordDialogVisible" :title="editRecordId ? '编辑 DNS 记录' : '添加 DNS 记录'" width="520px" @close="recordDialogVisible = false">
+      <form class="space-y-4" @submit.prevent="saveRecord">
+        <div>
+          <label class="label">类型</label>
+          <select v-model="recordForm.type" class="select">
+            <option value="A">A (IPv4)</option>
+            <option value="AAAA">AAAA (IPv6)</option>
+            <option value="CNAME">CNAME</option>
+            <option value="MX">MX</option>
+            <option value="TXT">TXT</option>
+            <option value="NS">NS</option>
+            <option value="SRV">SRV</option>
+          </select>
+        </div>
+        <div>
+          <label class="label">名称</label>
+          <input v-model="recordForm.name" class="input" placeholder="如 www 或 @ 表示根域名" required />
+        </div>
+        <div>
+          <label class="label">内容</label>
+          <input v-model="recordForm.content" class="input" placeholder="如 IP 地址或目标域名" required />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="label">TTL</label>
+            <select v-model.number="recordForm.ttl" class="select">
+              <option :value="1">Auto</option>
+              <option :value="60">1 分钟</option>
+              <option :value="300">5 分钟</option>
+              <option :value="1800">30 分钟</option>
+              <option :value="3600">1 小时</option>
+              <option :value="86400">1 天</option>
+            </select>
+          </div>
+          <div>
+            <label class="label">代理</label>
+            <button type="button" @click="recordForm.proxied = !recordForm.proxied" class="mt-1 relative w-11 h-6 rounded-full transition-colors" :class="recordForm.proxied ? 'bg-primary-600' : 'bg-surface-300 dark:bg-surface-600'">
+              <span class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform" :class="recordForm.proxied ? 'translate-x-5' : ''"></span>
+            </button>
+          </div>
+        </div>
+      </form>
       <template #footer>
-        <el-button @click="recordDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="recordSaving" @click="saveRecord">保存</el-button>
+        <button class="btn-secondary" @click="recordDialogVisible = false">取消</button>
+        <button class="btn-primary" :disabled="recordSaving" @click="saveRecord">保存</button>
       </template>
-    </el-dialog>
+    </Modal>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useToast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
 import api from '@/api'
+import Modal from '@/components/Modal.vue'
+import Loading from '@/components/Loading.vue'
+import type { CfConfig, DnsRecord } from '@/types'
 
-// ── CF 配置 ──────────────────────────────────────────────────────────────────
-const configs = ref([])
-const selectedCfgId = ref(null)
+const { success } = useToast()
+const { confirm } = useModal()
+
+const configs = ref<CfConfig[]>([])
+const selectedCfgId = ref<number | null>(null)
 const cfgDialogVisible = ref(false)
 const cfgSaving = ref(false)
-const editCfgId = ref(null)
-const cfgFormRef = ref()
-
+const editCfgId = ref<number | null>(null)
 const cfgForm = reactive({ name: '', api_token: '', zone_id: '', domain: '' })
-const cfgRules = {
-  name: [{ required: true, message: '请输入名称' }],
-  api_token: [{ required: true, message: '请输入 API Token' }],
-  zone_id: [{ required: true, message: '请输入 Zone ID' }],
-}
+
+const records = ref<DnsRecord[]>([])
+const totalRecords = ref(0)
+const recordsLoading = ref(false)
+const filterType = ref('')
+const recordDialogVisible = ref(false)
+const recordSaving = ref(false)
+const editRecordId = ref<string | null>(null)
+const recordForm = reactive({ type: 'A', name: '', content: '', ttl: 1, proxied: false })
 
 async function loadConfigs() {
-  try {
-    const res = await api.get('/cloudflare/configs')
-    configs.value = res.data
-  } catch {}
+  const res = await api.get('/cloudflare/configs')
+  configs.value = res.data
 }
 
 function openAddCfg() {
@@ -171,52 +202,33 @@ function openEditCfg() {
 }
 
 async function saveCfg() {
-  await cfgFormRef.value.validate()
   cfgSaving.value = true
   try {
     if (editCfgId.value) {
-      const payload = {}
+      const payload: any = {}
       if (cfgForm.name) payload.name = cfgForm.name
       if (cfgForm.api_token) payload.api_token = cfgForm.api_token
       if (cfgForm.zone_id) payload.zone_id = cfgForm.zone_id
       if (cfgForm.domain) payload.domain = cfgForm.domain
       await api.put(`/cloudflare/configs/${editCfgId.value}`, payload)
-      ElMessage.success('更新成功')
+      success('更新成功')
     } else {
       await api.post('/cloudflare/configs', cfgForm)
-      ElMessage.success('添加成功')
+      success('添加成功')
     }
     cfgDialogVisible.value = false
     await loadConfigs()
-  } finally {
-    cfgSaving.value = false
-  }
+  } finally { cfgSaving.value = false }
 }
 
 async function doDeleteCfg() {
-  await ElMessageBox.confirm('确认删除该 CF 配置？', '警告', { type: 'warning' })
+  const ok = await confirm('确认删除该 CF 配置？', '警告', { type: 'warning' })
+  if (!ok) return
   await api.delete(`/cloudflare/configs/${selectedCfgId.value}`)
-  ElMessage.success('删除成功')
+  success('删除成功')
   selectedCfgId.value = null
   records.value = []
   await loadConfigs()
-}
-
-// ── DNS 记录 ─────────────────────────────────────────────────────────────────
-const records = ref([])
-const totalRecords = ref(0)
-const recordsLoading = ref(false)
-const filterType = ref('')
-const recordDialogVisible = ref(false)
-const recordSaving = ref(false)
-const editRecordId = ref(null)
-const recordFormRef = ref()
-
-const recordForm = reactive({ type: 'A', name: '', content: '', ttl: 1, proxied: false })
-const recordRules = {
-  type: [{ required: true, message: '请选择类型' }],
-  name: [{ required: true, message: '请输入名称' }],
-  content: [{ required: true, message: '请输入内容' }],
 }
 
 async function onCfgChange() {
@@ -229,14 +241,12 @@ async function loadRecords() {
   if (!selectedCfgId.value) return
   recordsLoading.value = true
   try {
-    const params = { cfg_id: selectedCfgId.value, per_page: 100 }
+    const params: any = { cfg_id: selectedCfgId.value, per_page: 100 }
     if (filterType.value) params.type = filterType.value
     const res = await api.get('/cloudflare/dns-records', { params })
     records.value = res.data.records
     totalRecords.value = res.data.total
-  } catch {} finally {
-    recordsLoading.value = false
-  }
+  } finally { recordsLoading.value = false }
 }
 
 function openAddRecord() {
@@ -245,57 +255,34 @@ function openAddRecord() {
   recordDialogVisible.value = true
 }
 
-function openEditRecord(row) {
+function openEditRecord(row: DnsRecord) {
   editRecordId.value = row.id
-  Object.assign(recordForm, {
-    type: row.type,
-    name: row.name,
-    content: row.content,
-    ttl: row.ttl,
-    proxied: row.proxied,
-  })
+  Object.assign(recordForm, { type: row.type, name: row.name, content: row.content, ttl: row.ttl, proxied: row.proxied })
   recordDialogVisible.value = true
 }
 
 async function saveRecord() {
-  await recordFormRef.value.validate()
   recordSaving.value = true
   try {
     if (editRecordId.value) {
-      await api.put('/cloudflare/dns-records', {
-        cfg_id: selectedCfgId.value,
-        record_id: editRecordId.value,
-        ...recordForm,
-      })
-      ElMessage.success('更新成功')
+      await api.put('/cloudflare/dns-records', { cfg_id: selectedCfgId.value, record_id: editRecordId.value, ...recordForm })
+      success('更新成功')
     } else {
-      await api.post('/cloudflare/dns-records', {
-        cfg_id: selectedCfgId.value,
-        ...recordForm,
-      })
-      ElMessage.success('添加成功')
+      await api.post('/cloudflare/dns-records', { cfg_id: selectedCfgId.value, ...recordForm })
+      success('添加成功')
     }
     recordDialogVisible.value = false
     await loadRecords()
-  } finally {
-    recordSaving.value = false
-  }
+  } finally { recordSaving.value = false }
 }
 
-async function doDeleteRecord(row) {
-  await ElMessageBox.confirm(`确认删除记录「${row.name}」？`, '警告', { type: 'warning' })
-  await api.post('/cloudflare/dns-records/delete', {
-    cfg_id: selectedCfgId.value,
-    record_ids: [row.id],
-  })
-  ElMessage.success('删除成功')
+async function doDeleteRecord(row: DnsRecord) {
+  const ok = await confirm(`确认删除记录「${row.name}」？`, '警告', { type: 'warning' })
+  if (!ok) return
+  await api.post('/cloudflare/dns-records/delete', { cfg_id: selectedCfgId.value, record_ids: [row.id] })
+  success('删除成功')
   await loadRecords()
 }
 
 onMounted(loadConfigs)
 </script>
-
-<style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.page-header h2 { font-size: 22px; margin: 0; }
-</style>
